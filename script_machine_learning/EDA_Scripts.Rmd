@@ -1,0 +1,346 @@
+---
+title: "Mediation and Machine Learning For Post_Study"
+author: "Shuheng Jiang"
+date: "2024-09-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+```
+
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/raw_data"
+```
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())
+```
+
+### Correlation & Correlation Plots for Numeric Variables 
+```{r}
+d_try |> 
+  mutate(adhd_total = as.numeric(adhd_total),
+  adhd_clinical = as.numeric(adhd_clinical)) |>
+  select(days_since_semester_start, grit_overall, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, growth_mindset_score, grit_effort, grit_interest, grit_overall, adhd_total, adhd_clinical) |> 
+  cor(use = "pairwise.complete.obs") |> 
+  corrplot::corrplot.mixed(tl.pos = "lt")
+```
+
+
+There is a high positive correlation between the subscales and the composite scales: for example, a strong relationship exists among the matrices hit rate, Sandia matrices hit rate, and UCMRT matrices hit rate. Similarly, the subscales of grit (grit effort and grit interest) show high positive correlations with the overall grit score.
+
+A high positive correlation was found between overall grit and conscientiousness scores, which aligns with the findings of Gonzalez et al. (2020). Gonzalez and colleagues highlighted a construct overlap between grit and self-control, suggesting that grit has often been criticized as a redundant measure of conscientiousness.
+
+Due to the high positive correlation between overall grit and conscientiousness scores, conscientiousness also demonstrates a strong correlation with the grit effort and grit interest subscales.
+
+Both overall grit and conscientiousness show a negative correlation with ADHD total scores, indicating that higher levels of grit and conscientiousness are associated with lower ADHD scores.
+
+
+## Variable Classes and Tidy Names
+```{r eval = FALSE}
+d_try |> 
+  skim_some()
+```
+
+
+```{r}
+clean_class <- function(df){
+  
+  df |>
+    mutate(across(where(is.character), factor)) |> 
+    mutate(adhd_total = factor(adhd_total, 
+                               levels = 0:6),
+           adhd_clinical = factor(adhd_clinical, 
+                         levels = 0:1),
+           year = factor(year,
+                         levels = 2018:2023),
+           semester_id = fct_relevel(semester_id, c("Spring-2018", "Fall-2018","Spring-2019", "Fall-2019", "Spring-2020", "Fall-2020", "Spring-2021", "Fall-2021", "Spring-2022", "Fall-2022", "Fall-2023")),
+            academic_year = fct_relevel(academic_year, c("2017-2018", "2018-2019", "2019-2020", "2020-2021", "2021-2022", "2022-2023","2023-2024"))) |>
+    select(-participant_id_dataset, -date, -participant_id)
+
+}
+```
+*variable class notes: After viewing univariate modeling EDA results, we go back to cleaning EDA, realizing that variables like ADHD_total which are previously treated as numeric variables are actually ordinal variables*
+
+
+## Missing Data
+
+```{r eval=FALSE}
+d_try |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+
+```{r}
+d_try |> filter(is.na(adhd_clinical)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+*These might be the data you want to remove*
+
+
+```{r}
+d_try |> filter(is.na(growth_mindset_score)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+
+*For those who have NAs for growth mindset also has NAs for matrices tests scores*
+
+## Handle Missingness 
+```{r}
+ids_to_remove <- c("SEP_03_0020", "SEP_03_0039", "SEP_03_00240")  # Replace with your actual participant IDs
+
+# Remove the specified participant IDs from the dataset
+d_try <- d_try %>%
+  filter(!participant_id %in% ids_to_remove)
+```
+*Need to further discuss how to handle the missing values for matrices tests and mindset tests* 
+
+```{r}
+d_try <- d_try |>
+  filter(!is.na(ucmrt_hit_rate) & !is.na(matrices_hit_rate) & !is.na(sandia_matrices_hit_rate))
+```
+
+### Numeric variables
+```{r eval=FALSE}
+# skim data, looking at numeric min and max values
+d_try |>
+  skim_some() |> 
+  filter(skim_type == "numeric") |>  # Select only numeric variables since min/max only apply to them
+  select(skim_variable, numeric.p0, numeric.p100)
+```
+
+### Categorical Variables
+
+```{r}
+# tidy the response
+d_try <- d_try |> 
+  mutate(across(where(is.factor)))
+
+d_try |> 
+  select(where(is.factor)) |>
+  walk(\(column) print(levels(column)))
+```
+
+### Mediation
+Let's verbally describe our hypothesized mediation model.
+>> Higher Growth Mindset scores leads to higher self-control (lower grit score), which in turn leads to students choose to take the survey earlier in the semester.
+
+# X = ADHD_clinical
+# M = conscientious
+# Y = days_since_start_of_the_semester
+
+#### Other Mediation effect to explore: X: ucmrt, M:grit, Y: days
+#### X: ucmrt, M = conscience, Y= days
+
+# 1. There is a relationship between X and Y. Path c is significant.
+```{r}
+m1 <- lm(days_since_semester_start ~ adhd_clinical, data = d_try)
+summary(m1)
+```
+
+
+```{r}
+m2 <- lm(conscientiousness_score ~ adhd_clinical, data = d_try)
+summary(m2)
+```
+
+
+```{r}
+m3 <- lm(days_since_semester_start ~ conscientiousness_score + adhd_clinical, data = d_try)
+summary(m3)
+```
+Yes! There is a mediation effect to explore
+
+
+## Generate a Train Test Split
+```{r}
+set.seed(0429)
+splits <- d_try |> 
+  initial_split(prop = 3/4, strata = "days_since_semester_start", breaks = 4)
+```
+
+```{r}
+splits |> 
+  analysis() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_1_train.csv"))
+```
+
+```{r}
+splits |> 
+  assessment() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_1_test.csv"))
+```
+
+```{r}
+ data_trn <- read_csv(here::here(file_path, "data_1_train.csv")) |> 
+  glimpse()
+```
+
+```{r}
+ data_test <- read_csv(here::here(file_path, "data_1_test.csv"))
+```
+
+```{r}
+data_trn <- data_trn |> clean_class() |> glimpse()
+```
+
+```{r}
+data_test <- data_test |> clean_class()
+```
+
+
+### Univaraite Exploration of Numeric variables
+
+```{r}
+data_trn |> plot_hist("days_since_semester_start")
+```
+
+```{r}
+ggplot(data_trn, aes(x = semester_id)) +
+  geom_histogram(stat = "count") +
+  labs(title = "Histogram of Semester ID Counts",
+       x = "Semester ID",
+       y = "Count")
+```
+
+
+```{r}
+data_trn |> 
+  select(grit_overall, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, adhd_total, growth_mindset_score, grit_effort, grit_interest, grit_overall) |>
+  names() |> 
+  map(\(name) plot_box_violin(df = d_try, x = name)) |> 
+  plot_grid(plotlist = _, ncol = 4)
+```
+*variable class notes: After viewing univariate modeling EDA results, we go back to cleaning EDA, realizing that variables like ADHD_total which are previously treated as numeric variables are actually ordinal variables*
+
+
+
+## KKNN model
+```{r}
+set.seed(20010429)
+splits_boot <- data_trn |> 
+  bootstraps(times = 100, strata = "days_since_semester_start")
+```
+
+```{r}
+hyper_grid <- expand.grid(neighbors = seq(5, 100, by = 10))
+```
+
+```{r eval = FALSE}
+rec_knn1 <- recipe(matrices_hit_rate ~ adhd_clinial + days_since_semester_start + grit, data = data_trn) |>
+  step_rm(participant_id, participant_id_dataset) |>
+  step_zv(all_predictors()) |>
+  step_impute_median(all_numeric_predictors()) |> 
+  step_impute_mode(all_nominal_predictors()) |>
+  step_pca(departure_delay_in_minutes, arrival_delay_in_minutes,
+           options = list(center = TRUE, scale. = TRUE), 
+           num_comp = 1, 
+           prefix = "delay_") |>
+  step_YeoJohnson(all_numeric_predictors()) |> 
+  step_dummy(gender, customer_type, type_of_travel, customer_class) |>  
+  step_scale(all_numeric_predictors())|>
+  step_range(all_numeric_predictors())# to use knn, scale is important for distance calculation 
+```
+*cluster days_since_semester_start into "begining" "middle" "end"*
+
+Begin with quantile binning (e.g., tertiles) and check if the categories show meaningful differences in your psychometric scores.
+If the tertile clustering does not yield insights, try running a K-means clustering on days_since_semester_start and use the elbow method to determine the number of clusters.
+Use ANOVA or pairwise t-tests to confirm if there are statistically significant differences between the clusters in terms of psychometric scores.
+
+
+Addressing Your Research Questions:
+
+Q1: Is there an advantage to recruiting participants at different times during the semester?
+If your model shows that timing categories significantly predict scores like matrices_hit_rate or adhd_clinical, then recruiting participants at a particular time may yield more reliable or stable scores. For example, if "middle" semester respondents have consistently higher fluid intelligence scores, it might suggest a performance advantage to recruiting during this period.
+
+Q2: Controlling for the Timing Effect in Future Studies
+If you find robust effects of timing on psychometric scores, you can include days_since_semester_start or its categories as a covariate in future models. This approach, called "regressing out," helps isolate the true effect of other predictors by accounting for timing effects. For example:
+
+residuals_matrices ~ adhd_clinical + grit_score + conscientiousness_score
+(where residuals_matrices are the residuals after removing the influence of days_since_semester_start.)
+
+
+
+Linear Mixed-Effects Model (LMM):
+
+Model: matrices_hit_rate ~ days_since_semester_start_category + (1|semester) + adhd_clinical + grit_score + conscientiousness_score
+Explanation: This model can control for random effects like semester (to account for different semester-level variations) while evaluating whether days_since_semester_start_category significantly predicts scores like matrices_hit_rate.
+Output Interpretation: If the fixed effect of days_since_semester_start_category is significant, it indicates that timing affects performance on the matrices_hit_rate test. Post-hoc comparisons can help identify which categories ("beginning," "middle," or "end") show higher or lower scores.
+
+
+Multinomial Logistic Regression:
+
+Model: days_since_semester_start_category ~ adhd_clinical + matrices_hit_rate + grit_score + conscientiousness_score
+Explanation: Use this model to predict timing categories based on psychometric scores. This will tell you which variables contribute most to determining the likelihood of a participant completing the survey in the "beginning," "middle," or "end" of the semester.
+Output Interpretation: Significant coefficients indicate which psychometric variables are most associated with each timing category. For example, if participants with higher matrices_hit_rate are more likely to be in the "middle" category, it suggests an advantage to recruiting during this time period for higher fluid intelligence scores.
+
+
+Decision Trees/Random Forest Classifier:
+
+Model: Use a decision tree or random forest classifier to identify the most important variables that split the timing categories.
+Explanation: This model can reveal decision rules based on psychometric scores, showing which variables best predict early, middle, or late timing.
+Output Interpretation: If adhd_clinical is the most important variable for splitting between "early" and "late" timing, it suggests that ADHD scores influence when students participate, which could have implications for recruitment.
+

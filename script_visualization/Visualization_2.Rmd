@@ -1,0 +1,413 @@
+---
+title: "Visualization for R56"
+author: "Shuheng Jiang"
+date: "2024-09-29"
+output: 
+  html_document:
+    toc: true
+---
+## Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+```
+
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(ggpubr)
+```
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/raw_data_2"
+figure_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/figures_2"
+```
+
+### reading in data
+```{r}
+d_try <- read_csv(here::here(file_path, "R56_Combined.csv"), 
+                  col_types = cols())
+```
+
+```{r}
+range(d_try$days_since_semester_start)
+summary(d_try$days_since_semester_start)
+
+```
+```{r}
+# Remove NA values for `days_since_semester_start`
+d_try_f <- d_try[!is.na(d_try$days_since_semester_start), ]
+```
+
+```{r}
+range(d_try_f$days_since_semester_start)
+```
+```{r}
+colnames(d_try_f)
+```
+
+## Visualization
+```{r}
+range(d_try_f$neuroticism_score, na.rm = TRUE)
+```
+
+```{r}
+d_try_f %>% filter(participant_id_dataset %in% sample(unique(participant_id_dataset), 20)) %>% ggplot(aes(x = days_since_semester_start, y = raven_hit_rate)) + 
+  geom_smooth(method = "lm") + 
+  geom_point() + 
+  facet_wrap(~participant_id_dataset) +
+  theme_bw() + 
+  ggtitle("Assocaition within each participant")
+```
+
+
+
+### Semester effect on neuroticism score
+```{r}
+mod_1 <- lm(neuroticism_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_1) %>% eta_squared()
+# eta_square: 4.17e-03
+
+plot_neuro_complete <- ggplot(d_try_f, aes(x = days_since_semester_start, y = neuroticism_score)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Neuroticism Score', 
+       title = 'Semester Effect on Neuroticism Score') +
+  xlim(0, 107) +
+  ylim(1, 5.5) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_neuro_complete, 
+       filename = file.path(figure_path, 'plot_neuro_complete.png'), 
+       height = 5.0, width = 5.5,
+       units = 'in')  
+```
+
+
+```{r echo=FALSE, out.width='80%'}
+knitr::include_graphics(file.path(figure_path, 'plot_neuro_complete.png'))
+```
+
+```{r}
+d_try <- d_try[!is.na(d_try$semester_id), ]
+d_try$semester_id <- factor(d_try$semester_id, 
+                            levels = c("Summer-2020-4", "Summer-2020-8", "Fall-2020", "Spring-2021"))
+
+plot_neuro_complete_semestereach <- ggplot(d_try, aes(x = days_since_semester_start, y = neuroticism_score)) +
+  geom_point(alpha = 0.6, size = 2) +  
+  geom_smooth(method = "lm", color = "red", se = TRUE) + 
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester start', 
+       y = 'Big-5 NEuroticism Score',
+       title = 'Neuroticism Scores Over Time by Semester') +
+  xlim(0, 110) +
+  ylim(0, 8) +
+  stat_cor(color = "red") +  
+  facet_wrap(~semester_id, drop = TRUE) 
+
+ggsave(plot = plot_neuro_complete_semestereach, 
+       filename = file.path(figure_path, 'plot_neuro_complete_semestereach.png'), 
+       height = 7.5, width = 7.5, units = 'in')
+```
+```{r echo=FALSE, out.width='80%'}
+knitr::include_graphics(file.path(figure_path, 'plot_neuro_complete_semestereach.png'))
+```
+
+```{r}
+range(d_try_f$conscientiousness_score, na.rm = TRUE)
+```
+
+### Semester effect on Conscientiousness Score
+```{r}
+mod_2 <- lm(conscientiousness_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_2) %>% eta_squared()
+# eta_square: 4.17e-03
+
+plot_conscience_complete <- ggplot(d_try_f, aes(x = days_since_semester_start, y = conscientiousness_score)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Conscientiousness Score', 
+       title = 'Semester Effect on Conscientiousness Score') +
+  xlim(0, 107) +
+  ylim(1, 5.5) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_conscience_complete, 
+       filename = file.path(figure_path, 'plot_conscience_complete.png'), 
+       height = 5.0, width = 5.5,
+       units = 'in')  
+```
+
+```{r plot_conscience_complete_semestereach, echo=FALSE, out.width='80%'}
+knitr::include_graphics(file.path(figure_path, 'plot_conscience_complete.png'))
+```
+
+
+### Semester effect on Openness Score
+```{r}
+mod_3 <- lm(openness_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_3) %>% eta_squared()
+# eta_square: 1.10e-03
+```
+
+### Semester effect on extraversion score
+```{r}
+mod_4 <- lm(extraversion_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_4) %>% eta_squared()
+# eta_square: 6.98e-03 
+```
+### Semester effect on agreeableness score
+```{r}
+mod_5 <- lm(agreeableness_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_5) %>% eta_squared()
+# eta_sqaure: 6.17e-04
+```
+
+
+### semester effect on mindset score
+```{r}
+mod_6 <- lm(mindset_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_6) %>% eta_squared()
+# eta_squared = 7.06e-04 
+```
+### semester effect on grit score 
+```{r}
+mod_7 <- lm(grit_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_7) %>% eta_squared()
+# eta_squared = 3.76e-05
+```
+### semester effect on conscience score
+```{r}
+mod_8 <- lm(conscience_score ~ days_since_semester_start, data = d_try_f)
+anova(mod_8) %>% eta_squared()
+# eta_squared = 1.23e-04
+```
+### semester effect on meta-cog score
+```{r}
+mod_9 <- lm(meta_cog ~ days_since_semester_start, data = d_try_f)
+anova(mod_9) %>% eta_squared()
+# eta_squared = 1.64e-03
+```
+```{r}
+range(d_try_f$ucmrt_hit_rate, na.rm = TRUE)
+```
+
+
+### Semester effect on ucmrt hit rate 
+```{r}
+mod_10 <- lm(ucmrt_hit_rate ~ days_since_semester_start, data = d_try_f)
+anova(mod_10) %>% eta_squared()
+# eta_square: 2.49e-05
+
+plot_ucmrt_complete <- ggplot(d_try_f, aes(x = days_since_semester_start, y = ucmrt_hit_rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'UCMRT Hit Score', 
+       title = 'Semester Effect on UCMRT Hit Score') +
+  xlim(0, 107) +
+  ylim(0, 17) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_ucmrt_complete, 
+       filename = file.path(figure_path, 'plot_ucmrt_complete.png'), 
+       height = 5.0, width = 5.5,
+       units = 'in')  
+```
+
+```{r echo=FALSE, out.width='80%'}
+knitr::include_graphics(file.path(figure_path, 'plot_ucmrt_complete.png'))
+```
+
+
+```{r}
+plot_ucmrt_complete_semestereach <- ggplot(d_try, aes(x = days_since_semester_start, y = ucmrt_hit_rate)) +
+  geom_point(alpha = 0.6, size = 2) +  
+  geom_smooth(method = "lm", color = "red", se = TRUE) + 
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester start', 
+       y = 'UCMRT Hit Score',
+       title = 'UCMRT Hit Scores Over Time by Semester') +
+  xlim(0, 110) +
+  ylim(0,17) +
+  stat_cor(color = "red") +  
+  facet_wrap(~semester_id, drop = TRUE) 
+
+ggsave(plot = plot_ucmrt_complete_semestereach, 
+       filename = file.path(figure_path, 'plot_ucmrt_complete_semestereach.png'), 
+       height = 7.5, width = 7.5, units = 'in')
+```
+
+```{r}
+knitr::include_graphics(file.path(figure_path, 'plot_ucmrt_complete_semestereach.png'))
+```
+
+```{r}
+ucmrt_semester <- ggplot(d_try, aes(x = days_since_semester_start, y = ucmrt_hit_rate)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'UCMRT Hit Rate',
+       title = "Semester Effect on UCMRT Hit Rate By Semester Type") +
+  xlim(0, 110) +
+  ylim(0, 17) +
+  stat_cor(color = "red", size = 6) +
+  facet_wrap(~semester)
+
+ggsave(plot = ucmrt_semester, 
+       filename = file.path(figure_path, 'ucmrt_semester.png'), 
+       height = 4, width = 7.5, units = 'in')  
+
+```
+```{r}
+knitr::include_graphics(file.path(figure_path, 'ucmrt_semester.png'))
+```
+
+
+```{r}
+ucmrt_year <- ggplot(d_try, aes(x = days_since_semester_start, y = ucmrt_hit_rate)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'UCMRT Hit Rate',
+       title = "Semester Effect on UCMRT Hit Rate by Year") +
+  xlim(0, 110) +
+  ylim(0, 17) +
+  facet_wrap(~year)+
+  stat_cor(color = "red", size = 5) 
+ggsave(plot = ucmrt_year, 
+       filename = file.path(figure_path, 'ucmrt_year.png'), 
+       height = 7.0, width = 10, units = 'in')
+```
+
+```{r}
+knitr::include_graphics(file.path(figure_path, 'ucmrt_year.png'))
+```
+
+
+```{r}
+range(d_try_f$raven_hit_rate, na.rm = TRUE)
+```
+
+## Semester Effect on Raven Hit Rate
+```{r}
+mod_11 <- lm(raven_hit_rate ~ days_since_semester_start, data = d_try_f)
+anova(mod_11) %>% eta_squared()
+# eta_square: 5.73e-04
+
+plot_raven_complete <- ggplot(d_try_f, aes(x = days_since_semester_start, y = raven_hit_rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Raven Hit Score', 
+       title = 'Semester Effect on Raven Hit Score') +
+  xlim(0, 107) +
+  ylim(0, 15) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_raven_complete, 
+       filename = file.path(figure_path, 'plot_raven_complete.png'), 
+       height = 5.0, width = 5.5,
+       units = 'in') 
+```
+```{r}
+knitr::include_graphics(file.path(figure_path, 'plot_raven_complete.png'))
+```
+
+
+```{r}
+raven_semester <- ggplot(d_try, aes(x = days_since_semester_start, y = raven_hit_rate)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Raven Hit Rate',
+       title = "Semester Effect on Raven Hit Rate By Semester Type") +
+  xlim(0, 110) +
+  ylim(0, 15) +
+  stat_cor(color = "red", size = 6) +
+  facet_wrap(~semester)
+
+ggsave(plot = raven_semester, 
+       filename = file.path(figure_path, 'raven_semester.png'), 
+       height = 4, width = 7.5, units = 'in') 
+```
+
+```{r}
+knitr::include_graphics(file.path(figure_path, 'raven_semester.png'))
+```
+
+
+```{r}
+plot_raven_complete_semestereach <- ggplot(d_try, aes(x = days_since_semester_start, y = raven_hit_rate)) +
+  geom_point(alpha = 0.6, size = 2) +  
+  geom_smooth(method = "lm", color = "red", se = TRUE) + 
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester start', 
+       y = 'Raven Hit Score',
+       title = 'Raven Hit Scores Over Time by Semester') +
+  xlim(0, 110) +
+  ylim(0,15) +
+  stat_cor(color = "red") +  
+  facet_wrap(~semester_id, drop = TRUE) 
+
+ggsave(plot = plot_raven_complete_semestereach, 
+       filename = file.path(figure_path, 'plot_raven_complete_semestereach.png'), 
+       height = 7.5, width = 7.5, units = 'in')
+```
+
+```{r}
+knitr::include_graphics(file.path(figure_path, 'plot_raven_complete_semestereach.png'))
+```
