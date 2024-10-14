@@ -1,0 +1,12 @@
+10/11/2024 
+meeting note
+What to accomplish before next meeting:
+1) Reach out to Zach about the clean_ac_2021_wmgf; it is not uploaded into the shared folder 
+2) Have the visualizations for
+- big five for Clean_2021_EY_FYP
+- Matrices Hit Rate for Clean_2022_LA_Patterns_FYP and clean_ac_2021_wmgf_raw
+- Every test score for Postsurvey
+3) Bindrows of the three datasets (Not pretty sure about how to do it)
+4) Mediation test for the post survey 
+5) Trying different clustering method for post survey 
+6) Running Machine Learning Random Forest for example for the post survey (remove the rows where we do not have matrices tests score)

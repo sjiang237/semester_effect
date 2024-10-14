@@ -122,7 +122,7 @@ d_try$semester_phase <- cut(
   include.lowest = TRUE
 )
 ```
-
+Linear SVM; show whether the group differ by mixed components, then 
 
 ```{r}
 d_try <- d_try %>% select(participant_id, semester_phase, everything())
@@ -176,9 +176,11 @@ ggplot(d_try, aes(x = semester_phase, fill = has_na)) +
 ## Running Explanantory Models 
 Linear Mixed-Effects Model (LMM)
 ```{r}
-m1 <- lmer(matrices_hit_rate ~ semester_phase + (1|semester_id) + adhd_clinical + grit_overall + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + growth_mindset_score, data = d_try)
+m1 <- lmer(matrices_hit_rate ~ semester_phase + (1|semester_id) + adhd_clinical + grit_overall + conscientiousness_score + neuroticism_score + extraversion_score + openness_score + agreeableness_score + growth_mindset_score, data = d_try)
 ```
 
+run a new model: 
+matrices_hit_rate ~ semester_phase + (1|semester_id) + adhd_clinical + grit_overall + conscientiousness_score
 
 ```{r}
 summary(m1)
@@ -215,6 +217,12 @@ The significant effect of semester_phase suggests that when students take the su
 
 
 
+## Post-Hoc Test
+```{r}
+
+```
+
+
 
 ```{r}
 predicted_effects <- ggpredict(m1, terms = c("semester_phase"))
@@ -225,6 +233,9 @@ plot(predicted_effects) +
   xlab("Semester Phase") +
   ylab("Predicted Matrices Hit Rate") +
   theme_minimal()
+# ggsignif 
+# show violin plot 
+# plot dot and jitter 
 ```
 
 
@@ -364,6 +375,10 @@ ggplot(odds_data, aes(x = Variable, y = Odds_Ratio, color = Category)) +
   theme_minimal()
 ```
 
+
+Linkage clustering...
+
+What is the best way to cluster? SVM clustering
 
 
 ## Running AIC models comparison 
