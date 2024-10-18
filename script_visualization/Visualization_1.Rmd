@@ -1,0 +1,463 @@
+---
+title: "Visualization_1"
+author: "Shuheng Jiang"
+date: "2024-10-18"
+output: html_document
+---
+
+## Set up
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(ggpubr)
+devtools::install_github("NegativePotato/latltools")
+library(latltools)
+```
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_postsurvey"
+figure_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/figures_1"
+```
+
+### reading in data
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())
+```
+
+
+```{r}
+range(d_try$days_since_semester_start)
+```
+
+### Semester effect on adhd_total
+
+```{r}
+mod_1 <- lm(adhd_total ~ days_since_semester_start, data = d_try)
+anova(mod_1) %>% eta_squared()
+
+plot_a_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = adhd_total)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Total score of 6-items ASRS', 
+       title = 'Semester Effect on ADHD Total Score') +
+  xlim(0, 110) +
+  ylim(0, 7.0) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_a_complete, 
+       filename = file.path(figure_path, 'plot_a_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_a_complete , file_name_full_no_ext = file.path(figure_path, "plot_a_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on ADHD_clinical
+```{r}
+glm_1 <- glm(adhd_clinical ~ days_since_semester_start, family = binomial(link = "logit"), data = d_try)
+```
+
+```{r}
+newdata <- with(d_try, data.frame(
+  days_since_semester_start = rep(unique(days_since_semester_start))
+))
+newdata$prob <- predict(glm_1, newdata = newdata, type = "response")
+newdata$se <- predict(glm_1, newdata = newdata, type = "link", se.fit = TRUE)$se.fit
+
+# Plot the figure
+adhd_prob <- ggplot(d_try, aes(x = days_since_semester_start, y = adhd_clinical)) +
+  geom_point(position = position_jitter(width = 0.1, height = 0.1), alpha = 0.5) +
+  stat_smooth(data = newdata, aes(x = days_since_semester_start, y = prob, ymin = prob - 1.96 * se, ymax = prob + 1.96 * se),
+              method = "glm", method.args = list(family = "binomial"),
+              se = TRUE, fullrange = TRUE, alpha = 0.2) +
+  scale_y_continuous(name = "Probability of being diagnosed ADHD", labels = scales::percent) +
+  labs(title = "Semester Effect on Being Diagonized ADHD") +
+  theme_bw() +
+  stat_cor(color = 'blue', size = 5, label.x = 10, label.y = 0.8)
+ggsave(plot = adhd_prob, 
+       filename = file.path(figure_path, 'plot_adhd_prob.png'), 
+       height = 6.5, width = 9, units = 'in')
+```
+
+```{r}
+save_plot(plot = adhd_prob , file_name_full_no_ext = file.path(figure_path, "adhd_prob"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on Agreeableness score
+```{r}
+mod_2 <- lm(agreeableness_score ~ days_since_semester_start, data = d_try)
+anova(mod_2) %>% eta_squared()
+
+plot_big5_agr_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = agreeableness_score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Agreeableness',
+       title = "Semester Effect on Big-5 Agreeableness Score") +
+  xlim(0, 110) +
+  ylim(1, 5.5) +
+  stat_cor(color = "red", size = 6) 
+
+ggsave(plot = plot_big5_agr_complete, 
+       filename = file.path(figure_path, 'plot_agr_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_big5_agr_complete, file_name_full_no_ext = file.path(figure_path, "plot_big5_agr_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on Conscientiousness score
+```{r}
+mod_3 <- lm(conscientiousness_score ~ days_since_semester_start, data = d_try)
+anova(mod_3) %>% eta_squared()
+
+
+plot_big5_con_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = conscientiousness_score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Conscientiousness',
+       title = 'Semester Effect on Big-5 Conscientiousness Score') +
+  xlim(0, 110) +
+  ylim(1, 5.7) +
+  stat_cor(color = "red", size = 6) 
+
+
+ggsave(plot = plot_big5_con_complete, 
+       filename = file.path(figure_path, 'plot_big5_con_complete.png'), 
+       height = 5.5, width = 6,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_big5_con_complete, file_name_full_no_ext = file.path(figure_path, "plot_big5_con_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on Neuroticism score
+```{r}
+mod_4 <- lm(neuroticism_score ~ days_since_semester_start, data = d_try)
+anova(mod_4) %>% eta_squared()
+
+plot_big5_neu_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = neuroticism_score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Neuroticism',
+       title = 'Semester Effect on Big-5 Neuroticism Score') +
+  xlim(0,110)+
+  ylim(1, 5.3) +
+  stat_cor(color = "red", size = 6)
+
+ggsave(plot = plot_big5_neu_complete, 
+       filename = file.path(figure_path, 'plot_big5_neu_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_big5_neu_complete, file_name_full_no_ext = file.path(figure_path, "plot_big5_neu_complete"), width = 7, height = 7, units = 'in')
+```
+
+### Semester effect on Openness score
+```{r}
+mod_5 <- lm(openness_score ~ days_since_semester_start, data = d_try)
+anova(mod_5) %>% eta_squared()
+
+
+plot_big5_open_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = openness_score)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Openness',
+       title = 'Semester Effect on Big-5 Openness Score') +
+  xlim(0,110)+
+  ylim(1, 5.5) +
+  stat_cor(color = "red", size = 6)
+
+ggsave(plot = plot_big5_open_complete, 
+       filename = file.path(figure_path, 'plot_big5_open_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_big5_open_complete, file_name_full_no_ext = file.path(figure_path, "plot_big5_open_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on Extraversion score
+```{r}
+mod_6 <- lm(extraversion_score ~ days_since_semester_start, data = d_try)
+anova(mod_6) %>% eta_squared()
+
+
+plot_big5_extraversion_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = extraversion_score)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Big-5 Extraversion',
+       title = 'Semester Effect on Big-5 Extraversion Score') +
+  xlim(0,110)+
+  ylim(1, 5.4) +
+  stat_cor(color = 'red', size = 6)
+
+ggsave(plot = plot_big5_extraversion_complete, 
+       filename = file.path(figure_path, 'plot_big5_extraversion_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_big5_extraversion_complete , file_name_full_no_ext = file.path(figure_path, "plot_big5_extraversion_complete "), width = 7, height = 7, units = 'in')
+```
+
+### Semester effect on Growth Mindset Score
+```{r}
+mod_6 <- lm(growth_mindset_score ~ days_since_semester_start, data = d_try)
+anova(mod_6) %>% eta_squared()
+
+plot_growth_mindset_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = growth_mindset_score)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Score for Growth Mindset',
+       title = 'Semester Effect on Growth Mindset Score') +
+  xlim(0,110) +
+  ylim(1, 7.7) +
+  stat_cor(color = 'red', size = 6)
+
+ggsave(plot = plot_growth_mindset_complete, 
+       filename = file.path(figure_path, 'plot_growth_mindset_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_growth_mindset_complete , file_name_full_no_ext = file.path(figure_path, "plot_growth_mindset_complete"), width = 7, height = 7, units = 'in')
+```
+
+### Semester effect on grit score
+```{r}
+mod_7 <- lm(grit_overall ~ days_since_semester_start, data = d_try)
+anova(mod_7) %>% eta_squared()
+
+
+plot_grit_overall_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = grit_overall)) +
+  geom_jitter(alpah = 0.6) +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) +
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Score for Grit Overall',
+       title = 'Semester Effect on Grit Score') +
+  xlim(0,110) +
+  ylim(1, 4.5) +
+  stat_cor(color = 'red', size = 6)
+
+ggsave(plot = plot_grit_overall_complete, 
+       filename = file.path(figure_path, 'plot_grit_overall_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in') 
+```
+
+```{r}
+save_plot(plot = plot_grit_overall_complete, file_name_full_no_ext = file.path(figure_path, "plot_grit_overall_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on grit interest 
+```{r}
+mod_8 <- lm(grit_interest ~ days_since_semester_start, data = d_try)
+anova(mod_8) %>% eta_squared()
+
+
+plot_grit_interest_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = grit_interest)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Score for Grit Interesr',
+       title = 'Semester Effect on Grit Interest Score') +
+  xlim(0,110)+
+  ylim(1, 4.5) +
+  stat_cor(color = "red", size = 6)
+
+ggsave(plot = plot_grit_interest_complete, 
+       filename = file.path(figure_path, 'plot_grit_interest_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+```{r}
+save_plot(plot = plot_grit_interest_complete, file_name_full_no_ext = file.path(figure_path, "plot_grit_interest_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on grit effort
+```{r}
+mod_9 <- lm(grit_effort ~ days_since_semester_start, data = d_try)
+anova(mod_9) %>% eta_squared()
+
+
+plot_grit_effort_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = grit_effort)) +
+  geom_jitter(alpah = 0.6) +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Score for Grit Effort',
+       title = 'Semester Effect on Grit Effort Score') +
+  xlim(0,110)+
+  ylim(1, 4.5) +
+  stat_cor(color = "red", size = 6)
+
+ggsave(plot = plot_grit_effort_complete, 
+       filename = file.path(figure_path, 'plot_grit_effort_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_grit_effort_complete, file_name_full_no_ext = file.path(figure_path, "plot_grit_effort_complete"), width = 7, height = 7, units = 'in')
+```
+
+
+### Semester effect on Overall Matrices Hit Rate 
+```{r}
+mod_10 <- lm(matrices_hit_rate ~ days_since_semester_start, data = d_try)
+anova(mod_10) %>% eta_squared()
+
+plot_matrices_hit_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = matrices_hit_rate)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', 
+       y = 'Matrices Hit Rate',
+       title = 'Semester Effect on Matrices Hit Rate') +
+  xlim(0,110)+
+  ylim(0, 1.2) +
+  stat_cor(color = "red", size = 6)
+
+ggsave(plot = plot_matrices_hit_complete, 
+       filename = file.path(figure_path, 'plot_matrices_hit_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+save_plot(plot = plot_matrices_hit_complete, file_name_full_no_ext = file.path(figure_path, "plot_matrices_hit_complete"), width = 7, height = 7, units = 'in')
+```
+
+### Semester effect on Sandia Matrices Hit Rate 
+```{r}
+mod_11 <- lm(sandia_matrices_hit_rate ~ days_since_semester_start, data = d_try)
+anova(mod_11) %>% eta_squared()
+
+
+d_graph <- data.frame(days_since_semester_start = seq(0, 110, length = 1000))
+d_graph <- ggplotPredict(mod_11, d_graph)
+
+
+plot_sandiamatrices_hit_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = sandia_matrices_hit_rate)) +
+  geom_jitter() +
+  geom_smooth(data = d_graph, aes(ymin = CILo, ymax = CIHi, x = days_since_semester_start, y =Predicted),
+              stat = "identity", color="red") +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', y = 'Sandia Matrices Hit Rate') +
+  xlim(0,110)+
+  ylim(0, 1) +
+  stat_cor()
+```
+
+```{r}
+save_plot(plot = plot_sandiamatrices_hit_complete, file_name_full_no_ext = file.path(figure_path, "plot_sandiamatrices_hit_complete"), width = 7, height = 7, units = 'in')
+```
+
+### Semester Effect in ucmrt hit rate
+```{r}
+mod_12 <- lm(ucmrt_hit_rate ~ days_since_semester_start, data = d_try)
+anova(mod_12) %>% eta_squared()
+
+
+d_graph <- data.frame(days_since_semester_start = seq(0, 110, length = 1000))
+d_graph <- ggplotPredict(mod_12, d_graph)
+
+
+plot_ucmrt_hit_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = ucmrt_hit_rate)) +
+  geom_jitter() +
+  geom_smooth(data = d_graph, aes(ymin = CILo, ymax = CIHi, x = days_since_semester_start, y =Predicted),
+              stat = "identity", color="red") +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Days since semester starts when completed the survey', y = 'UCMRT Hit Rate') +
+  xlim(0,110)+
+  ylim(0, 1) +
+  stat_cor()
+plot_ucmrt_hit_complete
+```
+
+```{r}
+save_plot(plot = plot_ucmrt_hit_complete, file_name_full_no_ext = file.path(figure_path, "plot_ucmrt_hit_complete"), width = 7, height = 7, units = 'in')
+```

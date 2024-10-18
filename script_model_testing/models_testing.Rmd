@@ -46,7 +46,7 @@ library(ggplot2)
 library(effects)
 library(nnet)
 library(broom)
-# Load the required packages
+library(lavaan)
 library(ggeffects)
 ```
 
@@ -77,20 +77,43 @@ d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"),
 ```
 
 
-### Mediation
+## Mediation
+```{r}
+require(lavaan)
+library(beepr)
+```
+
+### Mediation model 1 
 Let's verbally describe our hypothesized mediation model.
 >> Higher Growth Mindset scores leads to higher self-control (lower grit score), which in turn leads to students choose to take the survey earlier in the semester.
 
-# X = ADHD_clinical
-# M = conscientious
-# Y = days_since_start_of_the_semester
+#### X = ADHD_clinical
+#### M = conscientious
+#### Y = days_since_start_of_the_semester
 
-#### Other Mediation effect to explore: X: ucmrt, M:grit, Y: days
-#### X: ucmrt, M = conscience, Y= days
+
+Possible Concerns:
+Clinical Diagnosis vs. Personality Trait: You mentioned this concern yourself. ADHD as a clinical diagnosis and conscientiousness as a personality trait may not have a direct or meaningful causal relationship. Personality traits like conscientiousness are often seen as relatively stable, while ADHD is a medical diagnosis. You may want to reconsider the theoretical justification of this relationship before continuing. It's essential that the mediation pathway makes sense theoretically.
+
+Explanation: conscientiousness construct overlap with self_control;
+
+```{r}
+range(d_try$days_since_semester_start)
+```
+
+```{r}
+hist(d_try$days_since_semester_start)
+```
+
+
+Need to Apply Log transformation, it is highly negatively skewed 
+```{r}
+d_try$days_since_semester_start_log <- log(d_try$days_since_semester_start)
+```
 
 # 1. There is a relationship between X and Y. Path c is significant.
 ```{r}
-m1 <- lm(days_since_semester_start ~ adhd_clinical, data = d_try)
+m1 <- lm(days_since_semester_start_log ~ adhd_clinical, data = d_try)
 summary(m1)
 ```
 
@@ -102,18 +125,98 @@ summary(m2)
 
 
 ```{r}
-m3 <- lm(days_since_semester_start ~ conscientiousness_score + adhd_clinical, data = d_try)
+m3 <- lm(days_since_semester_start_log ~ conscientiousness_score + adhd_clinical, data = d_try)
 summary(m3)
 ```
 Yes! There is a mediation effect to explore; But the hypothesis might not be valid, since adhd is a clinical diagnosis and conscientiousness_score is a personality test score. 
 
 
+Test whether c' is significantly reduced when introducing a*b
 ```{r}
-range(d_try$days_since_semester_start)
+medmodel_1 <- ' 
+
+# Lets first specify the models, and we can calculate other effects.
+# We want to predict conscientiousness(self_control) from adhd diagnosis. AND
+# We want to predict the day that come to test from self_control and adhd diagnosis.
+
+conscientiousness_score ~ A * adhd_clinical
+days_since_semester_start_log ~ CPRIME * adhd_clinical + B * conscientiousness_score
+
+# By adding "A" and "CPRIME" we are labeling the coefficients.
+
+# Define effects
+AB:= A*B # Indirect effect
+Total := CPRIME + A*B # Total effect
+'
 ```
 
 
+```{r}
+set.seed(20010429)
+fit2 <- sem(medmodel_1, data = d_try, se = "bootstrap", bootstrap = 1000)
+parameterEstimates(fit2, ci = TRUE, level = 0.95, boot.ci.type = "perc", zstat = F)
+```
+
+
+```{r}
+varTable(fit2)
+```
+
+The Confidence Interval Does Not include 0 for path AB; Condition 4 of the mediation test is satisfied. C' is now not significant.
+
+
+### Medaition Model 2 
+#### X = ADHD_clinical
+#### M = grit 
+#### Y = days_since_start_of_the_semester
+```{r}
+# New mediation model with grit score as the mediator (M)
+medmodel_grit <- '
+  grit_overall ~ A * adhd_clinical
+  days_since_semester_start_log ~ CPRIME * adhd_clinical + B * grit_overall
+  
+  # Indirect effect
+  AB := A * B
+  # Total effect
+  Total := CPRIME + A * B
+'
+
+set.seed(20010429)
+fit_grit <- sem(medmodel_grit, data = d_try, se = "bootstrap", bootstrap = 1000)
+parameterEstimates(fit_grit, ci = TRUE, level = 0.95, boot.ci.type = "perc", zstat = FALSE)
+```
+There does not exist a mediation effect 
+
+
+### Medaition Model 3
+#### X = UCMRT_HIT_RATE
+#### M = grit 
+#### Y = days_since_start_of_the_semester
+```{r}
+# Specify the mediation model with grit as the mediator
+medmodel_grit <- '
+  grit_overall ~ A * ucmrt_hit_rate  # Path A: Does fluid intelligence predict grit?
+  days_since_semester_start_log ~ CPRIME * ucmrt_hit_rate + B * grit_overall 
+
+  # Indirect effect (A * B) and Total effect (CPRIME + A * B)
+  AB := A * B  # Indirect effect
+  Total := CPRIME + A * B  # Total effect
+'
+
+# Fit the model
+set.seed(20010429)
+fit_grit <- sem(medmodel_grit, data = d_try, se = "bootstrap", bootstrap = 1000)
+
+# Output parameter estimates
+parameterEstimates(fit_grit, ci = TRUE, level = 0.95, boot.ci.type = "perc", zstat = FALSE)
+```
+
+No Mediation Effect 
+
+
 ## Cluster Variable days_since_semester_start
+What are the other way to cluster it? SVM clustering! 
+Month since the semester start
 ```{r}
 d_try$semester_phase <- cut(
   d_try$days_since_semester_start,
@@ -169,7 +272,6 @@ ggplot(d_try, aes(x = semester_phase, fill = has_na)) +
   theme_minimal()
 
 ```
-
 
 
 
@@ -272,7 +374,6 @@ Considering not doing intercept of semester_id, instead, do the slope for semest
 ```{r}
 d_try$days_since_semester_start_category <- factor(d_try$semester_phase, levels = c("beginning", "middle", "end"))
 ```
-
 
 ```{r}
 m2 <- multinom(semester_phase ~ matrices_hit_rate + adhd_clinical + grit_overall + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + growth_mindset_score, data = d_try)
@@ -383,3 +484,4 @@ What is the best way to cluster? SVM clustering
 
 ## Running AIC models comparison 
 
+train and test; make sure the model is not overfitting 

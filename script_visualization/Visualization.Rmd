@@ -62,8 +62,8 @@ options(tibble.width = Inf, dplyr.print_max=Inf)
 
 ### file path
 ```{r}
-file_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/raw_data"
-figure_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/figures"
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_postsurvey"
+figure_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/figures"
 ```
 
 ### reading in data
