@@ -1,0 +1,8 @@
+1. Multivariate approach from advisor 
+2. Ask about the best practice for clustering(pca, svm, k-means..)
+3. Ask Ezgi about how to average the personality score 
+4. Trying machine learning model (i.e. Random Forest) 
+5. Ask advisor does it make sense to log transform the time variable
+6. Start the powerpoint for presentation (start with dataset description, research question, methods...)
+7. have the correlation plots and semester_type facet graphs; put them online
+ 

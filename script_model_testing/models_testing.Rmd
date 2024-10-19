@@ -215,7 +215,7 @@ No Mediation Effect
 
 
 ## Cluster Variable days_since_semester_start
-What are the other way to cluster it? SVM clustering! 
+What are the other way to cluster it? SVM clustering!
 Month since the semester start
 ```{r}
 d_try$semester_phase <- cut(
