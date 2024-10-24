@@ -845,6 +845,9 @@ ggplot(data = d_try) +
 *delete start_date, recorded_date, replace date with date*
 *Add a column named "dataset_of_origin"*
 *Include "ResponseId" column in the raw data, change name into "participant_id_dataset"* 
+```{r}
+d_try <- d_try %>% select(participant_id, participant_id_dataset, semester_id, date, year, academic_year, semester, days_since_semester_start, first_day_of_the_semester, dataset_of_origin, source, grit_overall, grit_interest, grit_effort, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, adhd_clinical,adhd_total, growth_mindset_score)
+```
 
 ### Output as csv
 ```{r}

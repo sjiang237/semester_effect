@@ -273,7 +273,7 @@ ggplot(d_try, aes(x = semester_phase, fill = has_na)) +
 
 ```
 
-
+May also think of Testing General Linear Model Assumption test on the data 
 
 ## Running Explanantory Models 
 Linear Mixed-Effects Model (LMM)

@@ -6,3 +6,8 @@
 6. Start the powerpoint for presentation (start with dataset description, research question, methods...)
 7. have the correlation plots and semester_type facet graphs; put them online
  
+What to do next: 
+1. based on the decision tree, split the data from fall and spring, and do analysis on them separately, looking at the interaction effect before splitting them
+2. Thinking about quantile split of the data 
+3. New mediation model: 
+X= days M = conscientious Y = hit_rate

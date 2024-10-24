@@ -1,0 +1,521 @@
+---
+title: "Mediation and Machine Learning For Post_Study"
+author: "Shuheng Jiang"
+date: "2024-09-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+```
+
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_postsurvey"
+```
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())|>
+  glimpse()
+```
+
+
+## EDA for Data Cleaning
+### Variable Classes and Tidy Names
+
+Note that from our glimpse() above that all variable names are already lower case/snake case, but year should not be treated as double, adhd_clinical from the Numeric EDA below(or the background knowledge I have when I'm computing the composite score), should be treated as factor variable. 
+
+```{r}
+d_try <- d_try |>
+  mutate(across(where(is.character), factor)) |>
+  mutate(adhd_clinical = factor(adhd_clinical, levels = c("0", "1"), labels = c("no", "yes")),
+         year = factor(year, levels = 2018:2023)) |>
+  glimpse()
+```
+
+### Skim Data
+```{r}
+d_try|> 
+  skim_some() 
+```
+**Variable class notes:**
+*All variables are type factor, type numeric, or date and time. Some changes were made so that the classes as they were read in match their characteristics. The year variable represents the year participants answer the survey, so we class it as factor. We also classed adhd_clinical as factor with labels 'no' and 'yes'*
+
+
+### Missing Data
+
+```{r eval=FALSE}
+d_try |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+
+```{r}
+d_try |> filter(is.na(adhd_clinical)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+*These might be the data you want to remove*
+
+
+```{r}
+d_try |> filter(is.na(growth_mindset_score)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+
+*For those who have NAs for growth mindset also has NAs for matrices tests scores*
+
+### Handle Missingness 
+```{r}
+ids_to_remove <- c("SEP_03_0020", "SEP_03_0039", "SEP_03_00240")  # Replace with your actual participant IDs
+
+# Remove the specified participant IDs from the dataset
+d_try <- d_try %>%
+  filter(!participant_id %in% ids_to_remove)
+```
+*Need to further discuss how to handle the missing values for matrices tests and mindset tests* 
+
+```{r}
+d_try <- d_try |>
+  filter(!is.na(ucmrt_hit_rate) & !is.na(matrices_hit_rate) & !is.na(sandia_matrices_hit_rate))
+```
+
+```{r eval=FALSE}
+d_try |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+*Still Growth Mindset Score with missing data left*
+
+```{r}
+d_try |> filter(is.na(growth_mindset_score)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+
+*For those who only miss the growth mindset score, we want to impute the score using median*
+
+### Numeric variables
+```{r eval=FALSE}
+# skim data, looking at numeric min and max values
+d_try |>
+  skim_some() |> 
+  filter(skim_type == "numeric") |>  # Select only numeric variables since min/max only apply to them
+  select(skim_variable, numeric.p0, numeric.p100)
+```
+*Here, no responses seem out of the ordinary*
+
+### Categorical Variables
+**Tidy response labels for categorical variables:** 
+```{r}
+# tidy the response
+d_try <- d_try |> 
+  mutate(across(where(is.factor), tidy_responses))
+
+d_try |> 
+  select(semester_id, year, academic_year,semester, adhd_clinical, adhd_total) |>
+  walk(\(column) print(levels(column)))
+```
+
+Now that we have completed data cleaning, we will split our data into train and test sets and save out the cleaned files.
+
+### Generate a Train Test Split
+We'll set a seed so that the same split can be redone if needed (like if we find more errors during modeling EDA/feature engineering & need to come back to this script). Assign 25% of the data to be our validation set. Stratify this split on the `days_since_semester_start` outcome variable.
+```{r}
+set.seed(0429)
+splits <- d_try |> 
+  initial_split(prop = 3/4, strata = "days_since_semester_start", breaks = 4)
+```
+
+### Save cleaned files
+```{r}
+splits |> 
+  analysis() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_1_train.csv"))
+
+splits |> 
+  assessment() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_1_test.csv"))
+```
+Complete modeling EDA on the cleaned training data so that I'm able to do good feature engineering & model fitting
+
+
+## EDA for Modeling
+```{r}
+clean_class <- function(df){
+  
+  df |>
+  mutate(across(where(is.character), factor)) |>
+  mutate(adhd_clinical = factor(adhd_clinical, levels = c("0", "1"), labels = c("no", "yes")),
+         year = factor(year, levels = 2018:2023)) 
+}
+```
+
+```{r}
+data_trn <- 
+  read_csv(here::here(file_path, "data_1_train.csv"), 
+           col_types = cols()) |> 
+  clean_class() |>
+  glimpse()
+
+data_test <- 
+  read_csv(here::here(file_path, "data_1_test.csv"), 
+           col_types = cols()) |> 
+  clean_class()
+```
+
+```{r}
+data_trn |> skim_all()
+```
+
+
+### Univaraite Exploration of Numeric variables
+The distribution is a bit negatively skewed 
+```{r}
+data_trn |> plot_hist("days_since_semester_start")
+```
+*Might Consider Log transform it, but wonder whether it is interpretable, might also thinking of categorizing it*
+
+
+```{r}
+data_trn |> 
+  select(grit_overall, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, adhd_total, growth_mindset_score, grit_effort, grit_interest, grit_overall) |>
+  names() |> 
+  map(\(name) plot_box_violin(df = d_try, x = name)) |> 
+  plot_grid(plotlist = _, ncol = 4)
+```
+*variable class notes: All Numeric Variables Does not look very skewed*
+
+### Bivariate Exploration of Numeric Variables
+#### Correaltion Matrix
+```{r}
+data_trn |> 
+  select(days_since_semester_start, grit_overall, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, growth_mindset_score, grit_effort, grit_interest, grit_overall, adhd_total, adhd_clinical) |> 
+  cor(use = "pairwise.complete.obs") |> 
+  corrplot::corrplot.mixed(tl.pos = "lt")
+```
+
+There is a high positive correlation between the subscales and the composite scales: for example, a strong relationship exists among the matrices hit rate, Sandia matrices hit rate, and UCMRT matrices hit rate. Similarly, the subscales of grit (grit effort and grit interest) show high positive correlations with the overall grit score.
+
+A high positive correlation was found between overall grit and conscientiousness scores, which aligns with the findings of Gonzalez et al. (2020). Gonzalez and colleagues highlighted a construct overlap between grit and self-control, suggesting that grit has often been criticized as a redundant measure of conscientiousness.
+
+Due to the high positive correlation between overall grit and conscientiousness scores, conscientiousness also demonstrates a strong correlation with the grit effort and grit interest subscales.
+
+Both overall grit and conscientiousness show a negative correlation with ADHD total scores, indicating that higher levels of grit and conscientiousness are associated with lower ADHD scores.
+
+#### Table for Summary Statistics
+```{r}
+data_trn |> 
+  skim_all() |> 
+  filter(skim_type == "numeric")
+```
+
+#### Bivariate Relationship of Numeric Variable
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("days_since_semester_start", "matrices_hit_rate")
+```
+*the green line is LOWESS line (Locally Weighted Scatterplot Smoothing); The relationship seems quite linear, does not nees to log transform any variable here*
+
+```{r}
+data_trn |> mutate(openness_score = jitter(openness_score)) |> plot_scatter("openness_score", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(conscientiousness_score = jitter(conscientiousness_score)) |> plot_scatter("conscientiousness_score", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("adhd_total", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("grit_overall", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("agreeableness_score", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("extraversion_score", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("neuroticism_score", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("grit_interest", "matrices_hit_rate")
+```
+
+```{r}
+data_trn |> mutate(matrices_hit_rate = jitter(matrices_hit_rate)) |> plot_scatter("grit_effort", "matrices_hit_rate")
+```
+
+Looks Quite flat for this relationship, might consider drop this variable in the later feature selection process, conscientiousness score seems change quite a bit but it is not he same for grit, which confuses me a lot, because these two variables are said to have large construct overlap between them 
+
+### Univaraite Exploration of Categorical variables
+This is a binomial distribution
+```{r}
+ggplot(data_trn, aes(x = semester_id)) +
+  geom_histogram(stat = "count") +
+  labs(title = "Histogram of Semester ID Counts",
+       x = "Semester ID",
+       y = "Count")
+```
+
+
+```{r}
+data_trn |> 
+  select(year, semester_id, semester, academic_year, adhd_clinical) |>
+  names() |>
+  map(\(name) plot_bar(df = data_trn, x = name)) |>
+  plot_grid(plotlist = _, ncol = 2)
+```
+
+
+```{r}
+data_trn |> 
+  pull("adhd_clinical") |> 
+  table()
+```
+```{r}
+data_trn |> 
+  pull("semester") |> 
+  table()
+```
+```{r}
+data_trn |> 
+  pull("year") |> 
+  table()
+```
+These three variables are highlt inbalanced, but there is no way we should collapse any level
+
+```{r}
+data_trn |> 
+  pull("year") |> 
+  table()
+```
+
+### Bivariate Reltionship between the categorical 
+```{r}
+data_trn |> 
+  plot_grouped_barplot_percent(x = "adhd_clinical", y = "semester")
+```
+It is interesting to see that adhd diagnosis does not differ much between different type of semesters
+
+
+### Bivariate Realtionship between the numeric and categorical
+```{r}
+data_trn |> plot_grouped_box_violin("days_since_semester_start", "semester")
+```
+Student tend to start later during the fall than during the spring
+
+```{r}
+data_trn |> plot_grouped_box_violin("days_since_semester_start", "adhd_clinical")
+```
+Students do not have adhd diagnosis seem to start a bit earlier than students with adhd diagnosis 
+
+```{r}
+data_trn |> plot_grouped_box_violin("matrices_hit_rate", "adhd_clinical")
+```
+
+
+```{r}
+data_trn |> plot_grouped_box_violin("days_since_semester_start", "year")
+```
+We can think about because we are building a prediction model, whether putting previous years into the model can have any informative information for us to use the model in the new data
+
+### Potential Interactions
+```{r}
+ggplot() +
+  geom_point(data = data_trn, aes(x = days_since_semester_start, y = matrices_hit_rate, color = adhd_clinical), alpha = 0.5) +
+  geom_smooth(data = data_trn, aes(x = days_since_semester_start, y = matrices_hit_rate, color = adhd_clinical), method = "lm")
+```
+There seems to have an interaction of days_since_semester_start and adhd_clinical in matrices_hit_rate
+
+```{r}
+ggplot() +
+  geom_point(data = data_trn, aes(x = days_since_semester_start, y = matrices_hit_rate, color = semester), alpha = 0.5) +
+  geom_smooth(data = data_trn, aes(x = days_since_semester_start, y = matrices_hit_rate, color = semester), method = "lm")
+```
+
+
+
+There seems also exist an interaction of days_since_semester_start and semester_type on matrices_hit_rate
+
+
+## Model Building 
+Addressing Your Research Questions:
+
+Q1: Is there an advantage to recruiting participants at different times during the semester?
+If your model shows that timing categories significantly predict scores like matrices_hit_rate or adhd_clinical, then recruiting participants at a particular time may yield more reliable or stable scores. For example, if "middle" semester respondents have consistently higher fluid intelligence scores, it might suggest a performance advantage to recruiting during this period.
+
+Q2: Controlling for the Timing Effect in Future Studies
+If you find robust effects of timing on psychometric scores, you can include days_since_semester_start or its categories as a covariate in future models. This approach, called "regressing out," helps isolate the true effect of other predictors by accounting for timing effects. As out prior bivariate correaltion plots suggest, the days since start of the semester does not have significant correlation with most of the variables. 
+
+We want the focal predictor here being days_since_semester_start and outcome variable here being matrices_hit_rate
+### Create a traking tibble
+```{r}
+error_val <- tibble(model = character(), rmse_val = numeric()) |> 
+  glimpse()
+```
+
+## General Linear Model
+Write a recipe to fit a linear model to predict Matrices Hit Rate Score from predictors. Informed from your EDA above, be sure to include the following steps in your recipe: - Step to address missing data - Step to normalize numeric predictors - Appropriate steps for categorical predictors - Include the interaction between days vs. semester and days vs. adhd_clinical. 
+
+```{r}
+rec_linear1 <- 
+  recipe(matrices_hit_rate ~., data = data_trn) |>
+  step_rm(semester_id, academic_year, participant_id, participant_id_dataset, date, sandia_matrices_hit_rate, ucmrt_hit_rate, dataset_of_origin, source, first_day_of_the_semester)|>
+  step_YeoJohnson(grit_overall) |>
+  step_impute_median(growth_mindset_score)|>
+  step_interact(~ starts_with("semester"):days_since_semester_start) |>
+  step_interact(~ starts_with("adhd_clinical"):days_since_semester_start) |>
+  step_normalize(all_numeric_predictors()) |>
+  step_dummy(all_nominal_predictors()) 
+```
+
+```{r}
+rec_prep <- rec_linear1 |> 
+  prep(training = data_trn)
+```
+
+```{r}
+feat_trn <- rec_prep |> 
+  bake(new_data = NULL)
+```
+
+```{r}
+feat_trn |> skim_all()
+```
+
+```{r}
+fit_lm_1 <- 
+  linear_reg() |>
+  set_engine("lm") |>
+  fit(matrices_hit_rate ~ ., data = feat_trn)
+```
+
+```{r}
+get_estimate <- function(the_fit, the_term){
+  the_fit |> 
+    tidy() |> 
+    filter(term == the_term) |> 
+    pull(estimate)
+}
+```
+
+```{r}
+get_estimate(fit_lm_1, "days_since_semester_start")
+```
+```{r}
+feat_test <- rec_prep |> 
+  bake(new_data = data_test)
+```
+
+```{r}
+predict(fit_lm_1, feat_test)
+```
+
+```{r}
+plot_truth(truth = feat_test$matrices_hit_rate, 
+           estimate = predict(fit_lm_1, feat_test)$.pred)
+```
+```{r}
+rmse_vec(truth = feat_test$matrices_hit_rate, 
+         estimate = predict(fit_lm_1, feat_test)$.pred)
+```
+
+
+What to do next: 
+- Shap Values 
+ Explain why low performance: 
+ theoretically; and feature not important 
+*cluster days_since_semester_start into "begining" "middle" "end"*
+
+Begin with quantile binning (e.g., tertiles) and check if the categories show meaningful differences in your psychometric scores.
+If the tertile clustering does not yield insights, try running a K-means clustering on days_since_semester_start and use the elbow method to determine the number of clusters.
+Use ANOVA or pairwise t-tests to confirm if there are statistically significant differences between the clusters in terms of psychometric scores.
+
+
+Addressing Your Research Questions:
+
+Q1: Is there an advantage to recruiting participants at different times during the semester?
+If your model shows that timing categories significantly predict scores like matrices_hit_rate or adhd_clinical, then recruiting participants at a particular time may yield more reliable or stable scores. For example, if "middle" semester respondents have consistently higher fluid intelligence scores, it might suggest a performance advantage to recruiting during this period.
+
+Q2: Controlling for the Timing Effect in Future Studies
+If you find robust effects of timing on psychometric scores, you can include days_since_semester_start or its categories as a covariate in future models. This approach, called "regressing out," helps isolate the true effect of other predictors by accounting for timing effects. For example:
+
+residuals_matrices ~ adhd_clinical + grit_score + conscientiousness_score
+(where residuals_matrices are the residuals after removing the influence of days_since_semester_start.)
+
+
+
+Decision Trees/Random Forest Classifier:
+
+Model: Use a decision tree or random forest classifier to identify the most important variables that split the timing categories.
+Explanation: This model can reveal decision rules based on psychometric scores, showing which variables best predict early, middle, or late timing.
+Output Interpretation: If adhd_clinical is the most important variable for splitting between "early" and "late" timing, it suggests that ADHD scores influence when students participate, which could have implications for recruitment.
+
