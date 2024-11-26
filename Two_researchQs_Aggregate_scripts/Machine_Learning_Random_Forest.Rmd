@@ -409,21 +409,37 @@ plot_truth(truth = feat_test_rf$days_since_semester_start,
 
 
 
-Testing Partial dependence plot 
+## Gradient Boosting 
 ```{r}
-# Install required packages if not already installed
-if (!requireNamespace("pdp", quietly = TRUE)) install.packages("pdp")
 
+# Convert data to xgboost matrix format
+x_train <- as.matrix(data_trn %>% select(-days_since_semester_start))  # Predictors
+y_train <- data_trn$days_since_semester_start                          # Outcome
+x_test <- as.matrix(data_test %>% select(-days_since_semester_start))  # Test predictors
+y_test <- data_test$days_since_semester_start                          # Test outcome
 
-# Generate the partial dependence data
-pdp_grit <- partial(
-  object = fit_rf$fit,               # Extract the fitted ranger model
-  pred.var = "grit_overall",         # Specify the feature
-  train = feat_trn_rf                # Training data
+# Define the GBM model
+gbm_model <- xgboost(
+  data = x_train,
+  label = y_train,
+  max_depth = 6,         # Depth of trees
+  eta = 0.1,             # Learning rate
+  nrounds = 200,         # Number of boosting iterations
+  objective = "reg:squarederror", # Regression problem
+  verbose = 0            # Suppress training output
 )
 
-# Plot the Partial Dependence Plot
-plot(pdp_grit, main = "Partial Dependence Plot for Grit Overall")
+# Make predictions
+predictions_gbm <- predict(gbm_model, x_test)
+
+# Evaluate performance (e.g., RMSE)
+rmse_gbm <- sqrt(mean((y_test - predictions_gbm)^2))
+print(paste("GBM RMSE:", rmse_gbm))
+
+# Plot true vs. predicted values
+plot(y_test, predictions_gbm, main = "GBM: True vs Predicted",
+     xlab = "True Values", ylab = "Predicted Values", pch = 16, col = "blue")
+abline(a = 0, b = 1, col = "red", lwd = 2)
 
 ```
 
