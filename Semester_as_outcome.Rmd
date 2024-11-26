@@ -1,0 +1,387 @@
+---
+title: "Do Students with Different Characteristics Take Part in Psychology Experiments at Different Times of the Semester?"
+author: "Shuheng Jiang"
+date: "2024-11-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(lme4)
+library(ggplot2)
+library(effects)
+library(nnet)
+library(broom)
+library(lavaan)
+library(ggeffects)
+library(metafor)
+
+```
+
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
+```
+
+```{r}
+file_path_2 <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_3"
+```
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())
+```
+
+```{r}
+d_try_matrices_only <- read_csv(here::here(file_path_2, "Clean_AC_2021_wmgf_matrices.csv"), 
+                   col_types = cols())
+```
+
+```{r}
+d_try_personality_only <- read_csv(here::here(file_path_2, "Clean_2021_EY_FYP_Personality.csv"), 
+                   col_types = cols())
+```
+
+## Correlation Plot
+```{r}
+# Save as a PNG file
+png("correlation_plot.png", width = 800, height = 800)  # Set the file path and dimensions
+d_try |> 
+  select(days_since_semester_start, grit_overall, matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate, 
+         neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, 
+         growth_mindset_score, grit_effort, grit_interest, grit_overall, adhd_total, adhd_clinical) |> 
+  cor(use = "pairwise.complete.obs") |> 
+  corrplot::corrplot.mixed(tl.pos = "lt")
+dev.off()  # Close the graphical device
+
+```
+
+There is a high positive correlation between the subscales and the composite scales: for example, a strong relationship exists among the matrices hit rate, Sandia matrices hit rate, and UCMRT matrices hit rate. Similarly, the subscales of grit (grit effort and grit interest) show high positive correlations with the overall grit score.
+
+A high positive correlation was found between overall grit and conscientiousness scores, which aligns with the findings of Gonzalez et al. (2020). Gonzalez and colleagues highlighted a construct overlap between grit and self-control, suggesting that grit has often been criticized as a redundant measure of conscientiousness.
+
+Due to the high positive correlation between overall grit and conscientiousness scores, conscientiousness also demonstrates a strong correlation with the grit effort and grit interest subscales.
+
+Both overall grit and conscientiousness show a negative correlation with ADHD total scores, indicating that higher levels of grit and conscientiousness are associated with lower ADHD scores.
+(need to refer to a paper here)
+
+
+
+## Zero Order Correlation Test For Post_Survey Data
+```{r}
+cor_results <- list()
+
+cor_results[["Continuous"]] <- psych::corr.test(d_try[, c("grit_overall", "grit_interest", "grit_effort", "matrices_hit_rate", "ucmrt_hit_rate", "sandia_matrices_hit_rate", "neuroticism_score","extraversion_score", "conscientiousness_score", "openness_score", "agreeableness_score", "adhd_total", "growth_mindset_score")],
+                                                d_try[, c("days_since_semester_start")])
+
+# Dichotomous-Continuous Correlations (Point-Biserial)
+for(var in c("adhd_clinical")) {
+  cor_results[[var]] <- cor.test(d_try[[var]], d_try$days_since_semester_start)
+}
+print(cor_results)
+```
+
+
+
+
+See whether we can replicate the correlation in other datasets we have 
+```{r}
+cor_results_replicate <- list()
+
+cor_results_replicate[["Continuous"]] <- psych::corr.test(d_try_matrices_only[, c("matrices_hit_rate", "ucmrt_hit_rate", "sandia_matrices_hit_rate")],
+                                                d_try_matrices_only[, c("days_since_semester_start")])
+print(cor_results_replicate)
+```
+Discussion: The difference here in correlation might due to: 1) different sample size 2) number of items in posttest for sandia and ucmrt are 9 items tests; while in this dataset, ucmrt is 18 items and sandia is 14 items
+
+
+```{r}
+cor_results_replicate2 <- list()
+
+cor_results_replicate2[["Continuous"]] <- psych::corr.test(d_try_personality_only[, c("neuroticism","extraversion", "conscientiousness", "openness", "agreeableness")],
+                                                d_try_personality_only[, c("days_since_semester_start")])
+print(cor_results_replicate2)
+```
+
+
+We replicate the correlation of conscientiousness, openness and agreeableness score here! 
+*can include the correlation graphs from different datasets in PowerPoint* 
+
+As previous research is quite interested about extraversion and timing for participation, as finding from Harris et al.,(1991), Extraverts tended to sign up earlier, though this trend was not statistically significant in all analyses, Aviv et al., (2002) finding suggested the opposite, in our datasets here, in postsurvey data, the correlation is 0.07 positive but weak, and we fail to replicate this result from another dataset we have (correlation being 0.00). 
+
+
+### The combined correlation plots from datasets 
+Refer to another doc
+
+In general, these correlations indicate weak relationships, suggesting that most psychological traits and scores does not differ a lot between people participating research at different time of the semester. However, there are minor significant effects for some variables, particularly conscientiousness_score (decreasing) and adhd_total and adhd_clinical (increasing), fluid intelligence(decreasing). These trends, though slight, may still be of interest for understanding subtle changes in students’ cognitive and personality traits over the semester.
+
+Therefore, we want to run a mediation model to see whether there is a mediation effect of conscientiousness_score between adhd diagnosis and the time the person chose to participate 
+
+
+## Running Linear Model
+
+```{r}
+model_1 <- lm(days_since_semester_start ~ matrices_hit_rate + adhd_clinical + grit_overall + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + growth_mindset_score, data = d_try)
+```
+
+
+```{r}
+summary(model_1)
+```
+
+```{r}
+vif_values <- car::vif(model_1)
+print(vif_values)
+
+
+```
+
+No Multicollinearity effect 
+
+
+
+## Mediation Model 
+### Mediation model 1 
+*Let's verbally describe our hypothesized mediation model: Students diagonized ADHD leads to lower self-control (lower conscietious score) and less able to plan ahead to participate, which in turn leads to students choose to take the survey later in the semester.* 
+
+#### X = ADHD_clinical
+#### M = conscientious
+#### Y = days_since_start_of_the_semester
+
+
+Explanation: From the correaltion plot, we can tell that conscientious_score is significantly negatively correlated with ADHD score, so our rationale here is that ...........(refer to literature, later)
+conscientiousness construct overlap with self_control;
+
+```{r}
+range(d_try$days_since_semester_start)
+```
+
+```{r}
+hist(d_try$days_since_semester_start)
+```
+
+
+
+### 1. There is a relationship between X and Y. Path c is significant.
+```{r}
+m1 <- lm(days_since_semester_start ~ adhd_clinical, data = d_try)
+summary(m1)
+```
+
+
+```{r}
+m2 <- lm(conscientiousness_score ~ adhd_clinical, data = d_try)
+summary(m2)
+```
+
+
+```{r}
+m3 <- lm(days_since_semester_start ~ conscientiousness_score + adhd_clinical, data = d_try)
+summary(m3)
+```
+Yes! There is a mediation effect to explore; But the hypothesis might not be valid, since adhd is a clinical diagnosis and conscientiousness_score is a personality test score. 
+
+
+Test whether c' is significantly reduced when introducing a*b
+```{r}
+medmodel_1 <- ' 
+
+# Lets first specify the models, and we can calculate other effects.
+# We want to predict conscientiousness(self_control) from adhd diagnosis. AND
+# We want to predict the day that come to test from self_control and adhd diagnosis.
+
+conscientiousness_score ~ A * adhd_clinical
+days_since_semester_start ~ CPRIME * adhd_clinical + B * conscientiousness_score
+
+# By adding "A" and "CPRIME" we are labeling the coefficients.
+
+# Define effects
+AB:= A*B # Indirect effect
+Total := CPRIME + A*B # Total effect
+'
+```
+
+
+```{r}
+set.seed(20010429)
+fit2 <- sem(medmodel_1, data = d_try, se = "bootstrap", bootstrap = 1000)
+parameterEstimates(fit2, ci = TRUE, level = 0.95, boot.ci.type = "perc", zstat = F)
+```
+
+According to Gonzalez et al. (2020), both grit and conscientious score are representative of self_control, so we run another mediation model here having grit as mediator. 
+
+### Medaition Model 2 
+#### X = ADHD_clinical
+#### M = grit 
+#### Y = days_since_start_of_the_semester
+```{r}
+# New mediation model with grit score as the mediator (M)
+medmodel_grit <- '
+  grit_overall ~ A * adhd_clinical
+  days_since_semester_start ~ CPRIME * adhd_clinical + B * grit_overall
+  
+  # Indirect effect
+  AB := A * B
+  # Total effect
+  Total := CPRIME + A * B
+'
+
+set.seed(20010429)
+fit_grit <- sem(medmodel_grit, data = d_try, se = "bootstrap", bootstrap = 1000)
+parameterEstimates(fit_grit, ci = TRUE, level = 0.95, boot.ci.type = "perc", zstat = FALSE)
+```
+There does not exist a mediation effect 
+
+Might Have more dicussion here about why this is the case, can read more about this in paper from Gonzales et al., 
+
+
+
+*Some of the relationship might not be linear*
+
+After Analyzing the days_since_semester_start as continuous, we want to investigate it by categorizing the variables based on terciles (or another logical threshold) to ensure each category represents approximately one-third of the semester:
+
+Theoretical Motivation:
+
+1) While some research like Harris et al. (1991), like to test the day to take the test as continuous variable, other more recent reseach like Lisa et al., (2012) test the effect of semeter participation as dichotomous ("start" and "end" conditions)
+
+2) Semester Structure: The semester can often be divided into three natural phases:
+Start: This is typically the early weeks when students are settling into new routines, adapting to course demands, and possibly more open to voluntary activities (like experiments) as academic pressures are lower.
+Middle: This phase often coincides with midterms or project deadlines, leading to increased academic stress and workload. Students might be more selective about extracurricular engagements, which could impact their likelihood of participating in studies.
+End: The end of the semester is typically marked by final exams and project deadlines, which could reduce participation further, as students focus on academic requirements.
+
+3) Now we are doing multivariate analysis, because while univariate methods can give us part of the picture, multivariate analysis can give give us a broader picture.
+## Cluster Variable days_since_semester_start
+
+```{r}
+d_try$semester_phase <- cut(
+  d_try$days_since_semester_start,
+  breaks = c(-Inf, 39, 74, Inf),  # Define breakpoints based on days
+  labels = c("start", "middle", "end"),
+  include.lowest = TRUE
+)
+```
+
+### Check Categorization By Graphs 
+```{r}
+ggplot(d_try, aes(x = semester_phase)) +
+  geom_bar(fill = "lightblue") +
+  labs(title = "Distribution of Semester Phases", 
+       x = "Semester Phase", 
+       y = "Frequency") +
+  facet_wrap(~semester_id) +
+  theme_minimal()
+```
+can briefly justify that since enrollment are quite different between different semesters, we are not interested in having different semester as covariate 
+
+```{r}
+ggplot(d_try, aes(x = semester_phase)) +
+  geom_bar(fill = c("lightblue", "lightgreen", "lightcoral")) +
+  labs(title = "Distribution of Semester Phases", 
+       x = "Semester Phase", 
+       y = "Frequency") + 
+  theme_minimal() 
+```
+
+Participants are self-selective sample 
+
+
+## Multinomial Logistics 
+```{r}
+d_try$days_since_semester_start_category <- factor(d_try$semester_phase, levels = c("beginning", "middle", "end"))
+```
+
+```{r}
+multinomial <- multinom(semester_phase ~ matrices_hit_rate + adhd_clinical + grit_overall + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + growth_mindset_score, data = d_try)
+```
+
+```{r}
+summary(multinomial)
+```
+
+
+Matrices Hit Rate:
+
+Middle phase: -0.9287; End phase: -1.2546
+Both coefficients are negative, suggesting that students with higher matrices hit rates are less likely to participate in experiments in the middle or end of the semester compared to the start.
+This effect is stronger for the "end" phase.
+
+ADHD Clinical:
+
+Middle phase: -0.0751; End phase: 0.0181
+The coefficients are close to zero, indicating a minimal association between ADHD clinical scores and participation across semester phases. However, a small positive effect is seen for the "end" phase.
+
+Grit Overall:
+
+Middle phase: 0.0636; End phase: 0.0913
+These small positive coefficients suggest a slight tendency for students with higher grit scores to participate more in experiments later in the semester.
+
+Conscientiousness Score:
+
+Middle phase: -0.3521; End phase: -0.5838
+Negative coefficients suggest that students with higher conscientiousness scores are less likely to participate later in the semester, especially in the end phase.
+
+
+*Differing Impacts on Semester Timing for Conscientiousness and Grit:*
+
+*The reverse coefficients imply that while both traits contribute to goal-directed behavior, conscientiousness may be more sensitive to academic demands, leading students to reduce non-essential activities (like experiments) as workload peaks. Grit may counterbalance this tendency, supporting continued or even increased participation across different semester phases, as gritty students persist in activities despite rising academic pressures.*
+
+*Can also briefly mention the Consistent finding of personality score and the time to participate in the stuy* 
+
+## Prediction Model Using Random Forest For Feature Importance 
+
+#lowess line
+

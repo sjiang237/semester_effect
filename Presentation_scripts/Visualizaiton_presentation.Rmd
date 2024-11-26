@@ -67,7 +67,10 @@ file_path_2 <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect
 figure_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/figures_to_presentation"
 ```
 
+
+
 ### reading in data
+
 
 ```{r}
 d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
@@ -82,6 +85,88 @@ d_personality <- read_csv(here::here(file_path_2, "Clean_2021_EY_FYP_Personality
 ```{r}
 d_matrices <- read_csv(here::here(file_path_2, "Clean_AC_2021_wmgf_matrices.csv"), 
                    col_types = cols())
+```
+
+## Histogram
+```{r}
+d_try$semester_id <- factor(d_try$semester_id, 
+                            levels = c("Spring-2018", "Fall-2018", "Spring-2019", 
+                                       "Fall-2019", "Spring-2020", "Fall-2020", 
+                                       "Spring-2021", "Fall-2021", "Spring-2022", 
+                                       "Fall-2022", "Fall-2023"))
+
+ggplot(data = d_try) + 
+  geom_bar(aes(x= days_since_semester_start)) +
+  facet_wrap(~semester_id) 
+  
+```
+
+
+
+```{r}
+ggplot(data = d_try) + 
+  geom_bar(aes(x = days_since_semester_start), fill = "blue") + # Adjust bar colors
+  facet_wrap(~semester_id) +  # Arrange facets in a grid
+  theme_minimal() +  # Use a clean theme
+  labs(
+    title = "Enrollment Distribution of Participants By Semester",
+    x = "Days Since Semester Start",
+    y = "Enrollment Frequency",
+    caption = "Data source: Data_PostSurvey"
+  ) 
+```
+
+```{r}
+
+ggplot(data = d_try) + 
+  geom_bar(aes(x= days_since_semester_start), fill="pink") +
+  theme_minimal() +  # Use a clean theme
+  labs(
+    title = "Enrollment Distribution of Participants",
+    x = "Days Since Semester Start",
+    y = "Enrollment Frequency",
+    caption = "Data source: Data_PostSurvey"
+  ) 
+```
+
+```{r}
+unique(d_matrices$semester_id)
+```
+```{r}
+d_matrices$semester_id <- factor(d_matrices$semester_id, 
+                            levels = c("fall_2018", "spring_2019", "summer-8_2019",
+                                       "fall_2019", "spring_2020"))
+
+ggplot(data = d_matrices) + 
+  geom_bar(aes(x= days_since_semester_start), fill="yellow")+
+  theme_minimal() +  # Use a clean theme
+  labs(
+    title = "Enrollment Distribution of Participants",
+    x = "Days Since Semester Start",
+    y = "Enrollment Frequency",
+    caption = "Data source: Data_Matrices"
+  ) 
+```
+
+```{r}
+distribution_4 <- ggplot(data = d_personality) + 
+  geom_bar(aes(x= days_since_semester_start), fill="blue")+
+    theme_minimal() +  # Use a clean theme
+    labs(
+    title = "Enrollment Distribution of Participants",
+    x = "Days Since Semester Start",
+    y = "Enrollment Frequency",
+    caption = "Data source: Data_Personality"
+  ) 
+```
+
+
+
+```{r}
+ggsave(plot = distribution_4, 
+       filename = file.path(figure_path, 'distribution_4.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
 ```
 
 

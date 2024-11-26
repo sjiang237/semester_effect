@@ -153,10 +153,7 @@ d_torr <- d_torr[!is.na(d_torr$days_since_semester_start), ]
 range(d_torr$days_since_semester_start)
 ```
 
-```{r}
-d_matrices <- d_matrices[!is.na(d_matrices$days_since_semester_start), ]
-range(d_matrices$days_since_semester_start)
-```
+
 
 ### for d_matrices Cleaning the Missing composite score
 ```{r}
@@ -251,6 +248,10 @@ Not sure how to standardize the personality sore in this case, because they are 
 d_personality <- d_personality |>
   relocate(extraversion, agreeableness, conscientiousness, neuroticism, openness, .after = dataset_of_origin) |>
   clean_names()
+```
+
+```{r}
+head(d_matrices$semester_id)
 ```
 
 ## Save CSV
