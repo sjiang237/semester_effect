@@ -1,0 +1,308 @@
+---
+title: "Visualization_Presentation"
+author: "Shuheng Jiang"
+date: "2024-11-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(ggpubr)
+devtools::install_github("NegativePotato/latltools")
+library(latltools)
+```
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
+file_path_2 <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_3"
+figure_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/figures_to_presentation"
+```
+
+### reading in data
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())
+```
+
+```{r}
+d_personality <- read_csv(here::here(file_path_2, "Clean_2021_EY_FYP_Personality.csv"), 
+                   col_types = cols())
+```
+
+```{r}
+d_matrices <- read_csv(here::here(file_path_2, "Clean_AC_2021_wmgf_matrices.csv"), 
+                   col_types = cols())
+```
+
+
+### Visualization 
+Have visualization for conscientioussness, openness, agreeableness, extraversion, matrices hit rate from two datasets; adhd_diagnosis from one dataset 
+```{r}
+plot_big5_con_post <- ggplot(d_try, aes(x = conscientiousness_score, y = days_since_semester_start)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE)+
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Conscientiousness Postsurvey', 
+       y = 'Days since semester starts when completed the survey',
+       title = 'Whether Conscientiousness affect \n time to research participation') +
+  ylim(0, 110) +
+  xlim(1, 5) +
+  stat_cor(color = "red", size = 6) 
+
+plot_big5_con_post
+```
+
+```{r}
+ggsave(plot = plot_big5_con_post, 
+       filename = file.path(figure_path, 'plot_conscientiousness_postsurvey.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+
+
+```{r}
+
+plot_conscientiousness_replicat <- ggplot(d_personality, aes(x = conscientiousness, y = days_since_semester_start)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Conscientiousness Score Replication', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether Conscientiousness affect \n time to research participation') +
+  ylim(60, 110) +
+  xlim(18, 45) +
+  stat_cor(color = "blue", size = 6) 
+
+plot_conscientiousness_replicat
+
+ggsave(plot = plot_conscientiousness_replicat, 
+       filename = file.path(figure_path, 'plot_conscientiousness_replicat.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+
+```{r}
+plot_big5_open_post <- ggplot(d_try, aes(x = openness_score, y = days_since_semester_start)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Openness Postsurvey', 
+       y = 'Days since semester starts when completed the survey',
+       title = 'Whether Openness affect \n time to research participation') +
+  ylim(0,110)+
+  xlim(1, 5) +
+  stat_cor(color = "red", size = 6)
+plot_big5_open_post
+
+ggsave(plot = plot_big5_open_post, 
+       filename = file.path(figure_path, 'plot_big5_open_post.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+```{r}
+plot_openness_replication <- ggplot(d_personality, aes(x = openness, y = days_since_semester_start)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Openness Score Replication', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether Openness affect \n time to research participation') +
+  ylim(60, 110) +
+  xlim(14, 50) +
+  stat_cor(color = "blue", size = 6) 
+plot_openness_replication 
+ggsave(plot = plot_openness_replication, 
+       filename = file.path(figure_path, 'plot_openness_replication.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+
+Extraversion
+```{r}
+plot_big5_extraversion_post <- ggplot(d_try, aes(x = extraversion_score, y = days_since_semester_start)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Etraversion Postsurvey', 
+       y = 'Days since semester starts when completed the survey',
+       title = 'Whether Extraversion affect \n time to research participation') +
+  ylim(0,110)+
+  xlim(1, 5.4) +
+  stat_cor(color = 'red', size = 6)
+plot_big5_extraversion_post
+
+ggsave(plot = plot_big5_extraversion_post, 
+       filename = file.path(figure_path, 'plot_big5_extraversion_post.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+
+```{r}
+plot_extraversion_replication <- ggplot(d_personality, aes(x = extraversion, y = days_since_semester_start)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Extraversion Replication', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether Extraversion affect \n time to research participation') +
+  ylim(60, 110) +
+  xlim(15, 36) +
+  stat_cor(color = "blue", size = 6) 
+plot_extraversion_replication
+
+ggsave(plot = plot_extraversion_replication, 
+       filename = file.path(figure_path, 'plot_extraversion_replication.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+Agreeableness
+```{r}
+plot_big5_agr_complete <- ggplot(d_try, aes(x = agreeableness_score, y = days_since_semester_start)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Agreeableness Postsurvey', 
+       y = 'Days since semester starts when completed the survey',
+       title = "Whether Agreeableness affect \n time to research participation") +
+  ylim(0, 110) +
+  xlim(1, 5.5) +
+  stat_cor(color = "red", size = 6) 
+plot_big5_agr_complete
+
+ggsave(plot = plot_big5_agr_complete, 
+       filename = file.path(figure_path, 'plot_big5_agr_complete.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+```{r}
+plot_agreeableness_replication <- ggplot(d_personality, aes(x = agreeableness, y = days_since_semester_start)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Big-5 Agreeableness Replication', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether Agreeableness affect \n time to research participation') +
+  ylim(60, 110) +
+  xlim(17, 45) +
+  stat_cor(color = "blue", size = 6) 
+
+ggsave(plot = plot_agreeableness_replication, 
+       filename = file.path(figure_path, 'plot_agreeableness_replication.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+
+Matrices Hit Rate
+```{r}
+plot_matrices_hit_post <- ggplot(d_try, aes(x = matrices_hit_rate, y = days_since_semester_start)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color="red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Matrices Hit Rate Postsurvey', 
+       y = 'Days since semester starts when completed the survey',
+       title = 'Whether Fluid Intelligence affect \n time to research participation') +
+  ylim(0,110)+
+  xlim(0, 1.2) +
+  stat_cor(color = "red", size = 6)
+plot_matrices_hit_post
+ggsave(plot = plot_matrices_hit_post, 
+       filename = file.path(figure_path, 'plot_matrices_hit_post.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')
+```
+
+```{r}
+plot_matrices_replication <- ggplot(d_matrices, aes(x = matrices_hit_rate, y = days_since_semester_start)) +
+  geom_jitter() +
+  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Matrices Hit Rate Replication', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether Fluid Intelligence affect \n time to research participation') +
+  ylim(0, 110) +
+  xlim(0, 1) +
+  stat_cor(color = "blue", size = 6) 
+plot_matrices_replication
+ggsave(plot = plot_matrices_replication, 
+       filename = file.path(figure_path, 'plot_matrices_replication.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in')  
+```
+
+```{r}
+plot_adhd_postsurvey <- ggplot(d_try, aes(x = adhd_total, y = days_since_semester_start)) +
+  geom_jitter(alpha = 0.6) +
+  geom_smooth(method = "lm", color = "red", se = TRUE) +
+  theme_bw(base_size = 14) + 
+  labs(x = 'Total Score of 6-item ASRS Postsurvey', 
+       y = 'Days since semester starts when completed the survey', 
+       title = 'Whether ADHD Score affect \n time to research participation') +
+  ylim(0, 110) +
+  xlim(0, 7.0) +
+  stat_cor(color = "red", size = 6) 
+plot_adhd_postsurvey
+
+ggsave(plot = plot_adhd_postsurvey, 
+       filename = file.path(figure_path, 'plot_adhd_postsurvey.png'), 
+       height = 5.5, width = 5.5,
+       units = 'in') 
+```
+

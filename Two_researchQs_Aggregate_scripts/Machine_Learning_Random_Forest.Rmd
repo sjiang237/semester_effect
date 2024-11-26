@@ -1,0 +1,613 @@
+---
+title: "Fit_random_forest"
+author: "Shuheng Jiang"
+date: "2024-11-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+### Handle conflicts
+```{r}
+#| message: false
+options(conflicts.policy = "depends.ok")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_ml.R?raw=true")
+tidymodels_conflictRules()
+# We also will need to resolve a new conflict using the following code
+# Alternatively, John demonstrates code you can use when you load this library to prevent conflicts
+conflictRules("Matrix", mask.ok = c("expand", "pack", "unpack"))
+```
+
+### Load required packages 
+```{r}
+#| message: false
+#| warning: false
+library(kableExtra, exclude = "group_rows") # for displaying formatted tables w/ kbl()
+library(janitor, include.only = c("clean_names", "tabyl"))
+library(cowplot, include.only = "plot_grid")
+library(tidyverse) # for general data wrangling
+library(tidymodels) # for modeling
+library(kknn)
+library(discrim, exclude = "smoothness")
+library(xfun, include.only = "cache_rds")
+library(cowplot, include.only = "plot_grid")
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(vip, exclude = "titanic")
+detach("package:vip", unload = TRUE)
+library(DALEX, exclude= "explain")
+library(DALEXtra)
+```
+
+Be sure to initiate parallel processing and set up your path
+```{r}
+cl <- parallel::makePSOCKcluster(parallel::detectCores(logical = FALSE))
+doParallel::registerDoParallel(cl)
+```
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+
+### Specify other global settings
+```{r}
+#| include: false
+theme_set(theme_classic())
+options(tibble.width = Inf, dplyr.print_max=Inf)
+rerun_setting <- TRUE
+```
+
+### file path
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
+```
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())|>
+  glimpse()
+```
+
+```{r}
+
+hist(d_try$days_since_semester_start)
+```
+```{r}
+names(d_try)
+```
+
+
+```{r}
+d_try <- d_try %>% select(participant_id, everything())
+```
+
+
+
+## EDA for Data Cleaning
+### Variable Classes and Tidy Names
+
+Note that from our glimpse() above that all variable names are already lower case/snake case, but year should not be treated as double, adhd_clinical from the Numeric EDA below(or the background knowledge I have when I'm computing the composite score), should be treated as factor variable. 
+
+```{r}
+d_try <- d_try |>
+  mutate(across(where(is.character), factor)) |>
+  mutate(adhd_clinical = fct(if_else(adhd_clinical == 0, "yes", "no"), levels = c("yes", "no")),
+         semester = fct(if_else(semester == 0, "spring", "fall"), 
+                   levels = c("spring", "fall")),
+         year = factor(year, levels = 2018:2023)) |>
+  glimpse()
+```
+
+### Skim Data
+```{r}
+d_try|> 
+  skim_some() 
+```
+**Variable class notes:**
+*All variables are type factor, type numeric, or date and time. Some changes were made so that the classes as they were read in match their characteristics. The year variable represents the year participants answer the survey, so we class it as factor. We also classed adhd_clinical as factor with labels 'no' and 'yes'*
+
+
+### Missing Data
+
+```{r eval=FALSE}
+d_try |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+
+```{r}
+d_try |> filter(is.na(adhd_clinical)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+*These might be the data you want to remove*
+
+
+```{r}
+d_try |> filter(is.na(growth_mindset_score)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+
+*For those who have NAs for growth mindset also has NAs for matrices tests scores*
+
+### Handle Missingness 
+```{r}
+ids_to_remove <- c("SEP_03_0020", "SEP_03_0039", "SEP_03_00240")  # Replace with your actual participant IDs
+
+# Remove the specified participant IDs from the dataset
+d_try <- d_try %>%
+  filter(!participant_id %in% ids_to_remove)
+```
+*Need to further discuss how to handle the missing values for matrices tests and mindset tests* 
+
+```{r}
+d_try <- d_try |>
+  filter(!is.na(ucmrt_hit_rate) & !is.na(matrices_hit_rate) & !is.na(sandia_matrices_hit_rate))
+```
+
+```{r eval=FALSE}
+d_try |> 
+  skim_some() |> 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+
+*Still Growth Mindset Score with missing data left*
+
+```{r}
+d_try |> filter(is.na(growth_mindset_score)) |> 
+  kbl(align = "r") |> 
+  kable_styling(bootstrap_options = c("striped", "condensed")) |> 
+  scroll_box(height = "500px", width = "100%")
+```
+
+*For those who only miss the growth mindset score, we want to impute the score using median*
+
+### Numeric variables
+```{r eval=FALSE}
+# skim data, looking at numeric min and max values
+d_try |>
+  skim_some() |> 
+  filter(skim_type == "numeric") |>  # Select only numeric variables since min/max only apply to them
+  select(skim_variable, numeric.p0, numeric.p100)
+```
+*Here, no responses seem out of the ordinary*
+
+### Categorical Variables
+**Tidy response labels for categorical variables:** 
+```{r}
+# tidy the response
+d_try <- d_try |> 
+  mutate(across(where(is.factor), tidy_responses))
+
+d_try |> 
+  select(semester_id, year, academic_year,semester, adhd_clinical, adhd_total) |>
+  walk(\(column) print(levels(column)))
+```
+
+Now that we have completed data cleaning, we will split our data into train and test sets and save out the cleaned files.
+
+### Generate a Train Test Split
+We'll set a seed so that the same split can be redone if needed (like if we find more errors during modeling EDA/feature engineering & need to come back to this script). Assign 25% of the data to be our validation set. Stratify this split on the `days_since_semester_start` outcome variable.
+```{r}
+set.seed(0429)
+splits <- d_try |> 
+  initial_split(prop = 3/4, strata = "days_since_semester_start", breaks = 4)
+```
+
+### Save cleaned files
+
+```{r}
+splits |> 
+  analysis() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_2_train.csv"))
+
+splits |> 
+  assessment() |>
+  glimpse() |> 
+  write_csv(here::here(file_path, "data_2_test.csv"))
+```
+Complete modeling EDA on the cleaned training data so that I'm able to do good feature engineering & model fitting
+
+## EDA for Modeling
+```{r}
+clean_class <- function(df){
+  
+  df |>
+  mutate(across(where(is.character), factor)) |>
+  mutate(adhd_clinical = fct(if_else(adhd_clinical == 0, "yes", "no"), levels = c("yes", "no")),
+         semester = fct(if_else(semester == 0, "spring", "fall"), 
+                   levels = c("spring", "fall")),
+         year = factor(year, levels = 2018:2023))
+}
+```
+
+
+```{r}
+data_trn <- 
+  read_csv(here::here(file_path, "data_2_train.csv"), 
+           col_types = cols()) |> 
+  clean_class() |>
+  glimpse()
+
+data_test <- 
+  read_csv(here::here(file_path, "data_2_test.csv"), 
+           col_types = cols()) |> 
+  clean_class()
+```
+
+
+```{r}
+data_trn |> skim_all()
+```
+
+
+## Fit Random Forest 
+```{r}
+set.seed(20010429)
+splits_boot <- data_trn |> 
+  bootstraps(times = 100, strata = "days_since_semester_start")
+```
+Random Forest works well out of the box with little feature engineering
+It is still aggregating decision trees in bootstrap resamples of the training data
+However, the Random Forest algorithm does not natively handling missing data. We need to handle missing data manually during feature engineering. We will impute
+
+
+```{r}
+rec_up <- recipe(days_since_semester_start ~ grit_overall + matrices_hit_rate + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + adhd_total + growth_mindset_score + semester, data = data_trn) |> 
+  step_impute_median(all_numeric_predictors()) 
+
+
+
+rec_rf_prep <- rec_up |>
+  prep(data_trn)
+
+feat_trn_rf <- rec_rf_prep |> 
+  bake(NULL)
+
+feat_test_rf <- rec_rf_prep |>
+  bake(data_test)
+```
+
+
+```{r}
+grid_rf <- expand_grid(trees = c(100, 500, 750, 1000), 
+                       mtry = c(3, 5, 8, 10), 
+                       min_n = c(5, 8, 10, 12))
+```
+
+mtry: 
+The number of features to randomly select for splitting on each split
+Selection of value for mtry balances low tree correlation with reasonable predictive strength
+for regression: good to start with p/3; when there are fewer relevant features (e.g., noisy data) a higher value may be needed to make it more likely to select those features with the strongest signal.
+
+trees： A good rule of thumb is to start with 10 times the number of features
+The number of bootstrap resamples of the training data to fit decision tree base learners
+The number of trees needs to be sufficiently large to stabilize the error rate.
+You may need to adjust based on values for mtry and min_n
+More trees provide more robust and stable error estimates and variable importance measures
+More trees == more computational cost
+
+min_n:
+Minimum number of observations in a new node rather than min to split
+Note that this is different than its definition for decision trees and bagged trees
+You can consider the defaults (above) as a starting point
+If your data has many noisy predictors and higher mtry values are performing best, then performance may improve by increasing node size (i.e., decreasing tree depth and complexity).
+(default in rangr is 5 for regression)
+
+In Our case: Might expect a higher mtry(noisy predictors, less number of relevant predictors; weak correlation between dv and iv, more feature used to do the split; and we might expect a higher min_n, minimum number of observation for each split; and a lower tree depth)
+
+
+
+Decision Tree is the base learner of Random Forest: 
+The decision tree partitions the training data into homogeneous subgroups (i.e., groups with similar response values)
+
+These subgroups are called nodes
+
+The nodes are formed recursively using binary partitions by asking simple yes-or-no questions about each feature (e.g., are years in major league < 4.5?)
+
+This is done a number of times until a suitable stopping criteria is satisfied, e.g.,
+
+a maximum depth of the tree is reached
+minimum number of remaining observations is available in a node
+
+
+After all the partitioning has been done, the model predicts a single value for each region
+
+mean response among all observations in the region for regression problems
+
+
+
+
+Random forests are a modification of bagged decision trees that build a large collection of de-correlated trees to further improve predictive performance.
+
+They are a very popular “out-of-the-box” or “off-the-shelf” statistical algorithm that predicts well
+Many modern implementations of random forests exist; however, Breiman’s algorithm (Breiman 2001) has largely become the standard procedure.
+We will use the ranger engine implementation of this algorithm
+
+Random forests are a modification of bagged decision trees that build a large collection of de-correlated trees to further improve predictive performance.
+```{r}
+fits_rf_up <- cache_rds(
+  expr = {
+    rand_forest(trees = tune(),
+              mtry = tune(),
+              min_n = tune()) |>
+    set_engine("ranger",
+               respect.unordered.factors = "order",
+               oob.error = FALSE,
+               seed = 20010429) |>
+    set_mode("regression") |> 
+    tune_grid(preprocessor = rec_up, 
+              resamples = splits_boot, 
+              grid = grid_rf, 
+              metrics = metric_set(rmse))
+
+  },
+  rerun = rerun_setting,
+  dir = "cache/009/",
+  file = "fits_rf")
+```
+
+
+```{r}
+autoplot(fits_rf_up)
+```
+
+
+
+
+```{r}
+show_best(fits_rf_up)
+```
+
+
+```{r}
+fit_rf <-   
+  rand_forest(trees = 1000,
+                mtry = select_best(fits_rf_up)$mtry,
+                min_n = select_best(fits_rf_up)$min_n) |>
+  set_engine("ranger", 
+             respect.unordered.factors = "order", 
+             importance = "impurity", 
+             oob.error = FALSE,
+             seed = 20010429) |>
+  set_mode("regression") |>  
+  fit(days_since_semester_start ~ ., data = feat_trn_rf)
+```
+
+
+
+```{r}
+rmse_test = rmse_vec(truth = feat_test_rf$days_since_semester_start, 
+                                        estimate = predict(fit_rf,
+                                                           feat_test_rf)$.pred)
+rmse_test
+```
+```{r}
+plot_truth(truth = feat_test_rf$days_since_semester_start, 
+           estimate = predict(fit_rf, feat_test_rf)$.pred)
+```
+
+
+
+Testing Partial dependence plot 
+```{r}
+# Install required packages if not already installed
+if (!requireNamespace("pdp", quietly = TRUE)) install.packages("pdp")
+
+
+# Generate the partial dependence data
+pdp_grit <- partial(
+  object = fit_rf$fit,               # Extract the fitted ranger model
+  pred.var = "grit_overall",         # Specify the feature
+  train = feat_trn_rf                # Training data
+)
+
+# Plot the Partial Dependence Plot
+plot(pdp_grit, main = "Partial Dependence Plot for Grit Overall")
+
+```
+
+
+We want to know whether it is the feature that weakly correlated with the outcome that makes the accuracy this low or it is because of the recipe and model itself... 
+Ask GPT and it might probably spite out a solution for you about feature importance and so forth 
+
+```{r}
+rec_full_prep <- rec_up |> 
+  prep(d_try)
+```
+
+```{r}
+feat_full <-  rec_full_prep |> 
+  bake(d_try)
+```
+
+
+```{r}
+fit_rf_full <-   
+  rand_forest(trees = 1000,
+                mtry = select_best(fits_rf_up)$mtry,
+                min_n = select_best(fits_rf_up)$min_n) |>
+  set_engine("ranger", 
+             respect.unordered.factors = "order", 
+             importance = "impurity", 
+             oob.error = FALSE,
+             seed = 20010429) |>
+  set_mode("regression") |>  
+  fit(days_since_semester_start ~ ., data = feat_full)
+```
+
+
+
+```{r}
+x <- feat_full |> select(-days_since_semester_start)
+
+y <- feat_full |> 
+  mutate(days_since_semester_start = as.numeric(days_since_semester_start)) |> 
+  pull(days_since_semester_start)
+
+```
+
+
+```{r}
+predict_wrapper <- function(model, newdata) {
+  predict(model, newdata) |> 
+    pull(.pred)  # Extract the predicted numeric values
+}
+```
+
+
+```{r}
+explain_full <- explain_tidymodels(
+  fit_rf_full,       # model object
+  data = x,          # features without outcome
+  y = y,             # outcome vector
+  predict_function = predict_wrapper 
+)
+```
+
+
+
+
+```{r}
+accuracy_wrapper <- function(observed, predicted) {
+  # Ensure both observed and predicted are numeric
+  observed <- as.numeric(observed)
+  predicted <- as.numeric(predicted)
+  
+  # Calculate RMSE
+  sqrt(mean((observed - predicted)^2))
+}
+
+```
+
+
+```{r}
+set.seed(20010429)
+imp_permute <- model_parts(explain_full, 
+                           type = "raw", 
+                           loss_function = accuracy_wrapper,
+                           B = 100)
+
+```
+
+
+```{r}
+imp_permute 
+```
+*first row contains the rmse of the full model without any feature permuted; last row contains the baseline model, with rmse of all features permuted; Other row show the rmse of the model when that specific feature is permuted*
+
+*a higher increase in model's rmse, the more important the feature is; i.e. after permuted the conscientiousness score, the model's performance of rmse increase to the value of 19.53377, the closest to the rmse when all features being permuted* 
+
+
+
+
+```{r}
+plot(imp_permute)
+```
+*it shows that permuted the conscientiousness score will have the highest increase in rmse* 
+
+
+```{r}
+full_model <- imp_permute |>  
+    filter(variable == "_full_model_")
+  
+imp_permute |> 
+  filter(variable != "_full_model_",
+         variable != "_baseline_") |> 
+  mutate(variable = fct_reorder(variable, dropout_loss)) |> 
+  ggplot(aes(dropout_loss, variable)) +
+  geom_vline(data = full_model, aes(xintercept = dropout_loss),
+             linewidth = 1.4, lty = 2, alpha = 0.7) +
+  geom_boxplot(fill = "#91CBD765", alpha = 0.4) +
+  theme(legend.position = "none") +
+  labs(x = "Root Mean Squared Error", 
+       y = NULL,  fill = NULL,  color = NULL)
+```
+
+```{r}
+obs_num <- 1
+x1 <- x |> 
+  slice(obs_num) |> 
+  glimpse()
+```
+
+
+```{r}
+sv <- predict_parts(explain_full, 
+                    new_observation = x1,
+                    type = "shap",
+                    B = 25)
+```
+
+
+```{r}
+plot(sv)
+```
+
+*What does contribution mean? why a contribution can be negative?* 
+
+```{r}
+get_shaps <- function(df1){
+  predict_parts(explain_full, 
+                new_observation = df1,
+                type = "shap",
+                B = 25) |> 
+    filter(B == 0) |> 
+    select(variable_name, variable_value, contribution) |> 
+    as_tibble()
+}
+```
+
+```{r}
+library(furrr) # For parallel processing
+
+# Set up parallel processing
+plan(multisession, workers = parallel::detectCores() - 1)
+
+local_shaps <- cache_rds(
+  expr = {
+    x |>
+      slice_sample(prop = 1/20) |> # Further reduce sample size
+      mutate(shaps = future_map(row_number(), ~ get_shaps(x[.x, ]))) |> # Parallelize SHAP computation
+      unnest(shaps)
+  },
+  rerun = rerun_setting,
+  dir = file_path,
+  file = "local_shaps"
+)
+
+```
+
+```{r}
+local_shaps |>
+  mutate(contribution = abs(contribution)) |>
+  group_by(variable_name) |>
+  summarize(mean_shap = mean(contribution)) |>
+  arrange(desc(mean_shap)) |>
+  mutate(variable_name = factor(variable_name),
+         variable_name = fct_reorder(variable_name, mean_shap)) |>
+  ggplot(aes(x = variable_name, y = mean_shap)) +
+  geom_point() +
+  coord_flip()
+```
+

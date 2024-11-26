@@ -1,8 +1,0 @@
----
-title: "Bi-Factor_Analysis"
-author: "Shuheng Jiang"
-date: "2024-10-20"
-output: html_document
----
-
-

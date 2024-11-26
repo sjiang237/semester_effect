@@ -56,9 +56,12 @@ options(tibble.width = Inf, dplyr.print_max=Inf)
 
 ### file path
 ```{r}
-file_path <- "C:/Users/16089/OneDrive/Desktop/Greens lab/semester/raw_data"
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/raw_data_1"
 ```
 
+```{r}
+cleaned_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
+```
 
 ## Cleaning EDA
 
@@ -851,7 +854,7 @@ d_try <- d_try %>% select(participant_id, participant_id_dataset, semester_id, d
 
 ### Output as csv
 ```{r}
-d_try |> write_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"))
-d_wrong |> write_csv(here::here(file_path, 
+d_try |> write_csv(here::here(cleaned_path, "Generic_Post_Survey_Combined.csv"))
+d_wrong |> write_csv(here::here(cleaned_path, 
 "Generic_Post_Survey_Combined_Excluded.csv"))
 ```

@@ -42,6 +42,10 @@ library(skimr)
 library(tidyselect)
 library(tibble)
 library(effectsize)
+library(vip, exclude = "titanic")
+detach("package:vip", unload = TRUE)
+library(DALEX, exclude= "explain")
+library(DALEXtra)
 ```
 
 Be sure to initiate parallel processing and set up your path
@@ -69,7 +73,7 @@ rerun_setting <- TRUE
 
 ### file path
 ```{r}
-file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_postsurvey"
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
 ```
 
 ```{r}
@@ -77,6 +81,7 @@ d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"),
                    col_types = cols())|>
   glimpse()
 ```
+
 ```{r}
 d_try$semester_phase <- cut(
   d_try$days_since_semester_start,
@@ -249,6 +254,7 @@ data_test <-
   clean_class()
 ```
 
+
 ```{r}
 data_trn |> skim_all()
 ```
@@ -298,7 +304,7 @@ ggplot(data_trn, aes(x = semester_phase)) +
        x = "Semester Phase",
        y = "Count")
 ```
-
+Might think of oversampling the minority class or undersampling the majority class 
 
 ```{r}
 data_trn |> 
@@ -326,6 +332,7 @@ plot_grouped_barplot_count(df = data_trn, x = "semester_phase", y = "semester")
 ```
 
 How to deal with this imbalancy? 
+might think of 
 
 ### Bivariate Realtionship between the numeric and categorical
 ```{r}
@@ -347,29 +354,56 @@ data_trn |>
   map(\(name) plot_grouped_box_violin(df = data_trn, x = name, y = "semester_phase")) |>
   plot_grid(plotlist = _, ncol = 3)
 ```
+
+
+```{r}
+data_trn |> 
+  select(grit_overall, matrices_hit_rate, neuroticism_score, extraversion_score, conscientiousness_score, openness_score, agreeableness_score, growth_mindset_score, adhd_total) |> 
+  cor(use = "pairwise.complete.obs") |> 
+  corrplot::corrplot.mixed(tl.pos = "lt")
+```
+
+
 ## Fit Decision Trees
+
+```{r}
+data_balanced <- data_trn |> 
+  group_by(semester_phase) |> 
+  sample_n(size = max(table(data_trn$semester_phase)), replace = TRUE) |> 
+  ungroup()
+
+```
+
+
 Instead of the bootstrap, can think of the k-fold being used as validation method 
 ```{r}
 set.seed(20010429)
-splits_boot <- data_trn |> 
-  bootstraps(times = 100, strata = "semester_phase")
+splits_cv <- data_balanced |> 
+  vfold_cv(v = 10, strata = "semester_phase")  # 10-fold cross-validation
 ```
 
+
 ```{r}
-rec <- recipe(semester_phase ~ ., data = data_trn) |> 
-  step_rm(semester_id, academic_year, participant_id, participant_id_dataset, date,   dataset_of_origin, source, first_day_of_the_semester, year) |>
+data_balanced <- data_balanced |> 
+  mutate(semester_phase = as.factor(semester_phase))
+
+rec <- recipe(semester_phase ~ grit_overall + matrices_hit_rate + neuroticism_score + extraversion_score + conscientiousness_score + openness_score + agreeableness_score + adhd_total + growth_mindset_score + semester, data = data_trn) |> 
   step_impute_median(all_numeric_predictors()) |> 
-  step_impute_mode(all_nominal_predictors())
+  step_impute_mode(all_nominal_predictors()) 
 
 rec_prep <- rec |>
-  prep(data_trn)
+  prep(data_balanced)
 
 feat_trn <- rec_prep |> 
   bake(NULL)
 
 feat_test <- rec_prep |> 
   bake(data_test)
+
+feat_trn |> skim_some()
 ```
+
+
 
 ```{r}
 grid_tree <- grid_regular(cost_complexity(), tree_depth(), min_n(), levels = 4)
@@ -378,22 +412,17 @@ grid_tree
 ```
 
 ```{r}
-fits_tree <- cache_rds(
-  expr = {
+fits_tree <- 
     decision_tree(cost_complexity = tune(),
                 tree_depth = tune(),
                 min_n = tune()) |>
     set_engine("rpart") |>
     set_mode("classification") |> 
     tune_grid(preprocessor = rec, 
-              resamples = splits_boot, 
+              resamples = splits_cv, 
               grid = grid_tree, 
               metrics = metric_set(roc_auc))
 
-  },
-  rerun = rerun_setting,
-  dir = file_path,
-  file = "fits_tree")
 ```
 
 
@@ -420,6 +449,7 @@ fit_tree <-
 
 ```{r}
 fit_tree$fit |> rpart.plot::rpart.plot()
+# adhd_clinical or adhd_total 
 ```
 
 
@@ -435,10 +465,11 @@ cm_2
 cm_2 %>% summary()
 ```
 
+```{r}
+autoplot(cm_2)
+```
+
 *Indicating that the model has very low prediction power* 
-
-Run a Shap Value Instead Probably....
-
 
 
 ## Fit Bootstrap Aggregating Prediction Model 
@@ -452,30 +483,31 @@ splits_boot <- data_trn |>
 ```
 
 ```{r}
+rec_rf_prep <- rec |>
+  prep(data_trn)
 
+feat_trn_rf <- rec_rf_prep |> 
+  bake(NULL)
+
+feat_test_rf <- rec_rf_prep |>
+  bake(data_test)
 ```
+
+
+1. Can also report the results;  
+2. Force the depth to be a constant; 
+For next week: 
+1. top priority: what I have done with the decision tree 
+ - recipe (variables in the model)
+ - samples (train and test, show the the imbalance of the outcome in the sample, how I deal with it)
+ - results (the hyperparameters for the model, fit)
+ - How I refine the model
 
 ### Hyperparameters
 ```{r}
 grid_rf <- expand_grid(trees = c(250, 500, 750, 1000), 
                        mtry = c(1, 5, 10, 20),
                        min_n = c(1, 2, 5, 10))
-```
-
-```{r}
-rec_rf <- recipe(semester_phase ~ ., data = data_trn) |> 
-  step_rm(semester_id, academic_year, participant_id, participant_id_dataset, date,   dataset_of_origin, source) |>
-  step_impute_median(all_numeric_predictors()) |> 
-  step_impute_mode(all_nominal_predictors())
-
-rec_rf_prep <- rec_rf |>
-  prep(data_trn)
-
-feat_trn_rf <- rec_rf_prep |> 
-  bake(NULL)
-
-feat_test_rf <- rec_rf_prep |> 
-  bake(data_test)
 ```
 
 
@@ -487,10 +519,11 @@ fits_rf <-cache_rds(
               min_n = tune()) |>
     set_engine("ranger",
                respect.unordered.factors = "order",
+               importance = "impurity", 
                oob.error = FALSE,
                seed = 20010429) |>
     set_mode("classification") |> 
-    tune_grid(preprocessor = rec_rf, 
+    tune_grid(preprocessor = rec, 
               resamples = splits_boot, 
               grid = grid_rf, 
               metrics = metric_set(roc_auc))
@@ -500,4 +533,198 @@ fits_rf <-cache_rds(
   dir = file_path,
   file = "fits_rf")
 ```
+
+```{r}
+autoplot(fits_rf)
+```
+
+Telling why different parameter, why this range of the parameter!!
+
+
+```{r}
+show_best(fits_rf)
+```
+
+
+# Explain what roc_auc and estimator 
+# Upsample the random forest 
+
+
+```{r}
+fit_rf <-   
+  rand_forest(trees = select_best(fits_rf)$trees,
+                mtry = select_best(fits_rf)$mtry,
+                min_n = select_best(fits_rf)$min_n) |>
+  set_engine("ranger", 
+             respect.unordered.factors = "order", 
+             importance = "impurity", 
+             oob.error = FALSE,
+             seed = 20010429) |>
+  set_mode("classification") |>  
+  fit(semester_phase ~ ., data = feat_trn_rf)
+```
+
+
+```{r}
+cm_3 <- tibble(truth = feat_test_rf$semester_phase,
+             estimate = predict(fit_rf, feat_test_rf)$.pred_class) |> 
+  conf_mat(truth, estimate)
+
+
+cm_3
+```
+
+```{r}
+cm_3 %>% summary()
+```
+
+```{r}
+autoplot(cm_3)
+```
+
+```{r}
+importance_rf <- vip(fit_rf, method = "model", num_features = 10)
+```
+
+
+```{r}
+importance_rf
+```
+
+Feature Importance
+
+```{r}
+rec_full_prep <- rec |> 
+  prep(d_try)
+
+feat_full <-  rec_full_prep |> 
+  bake(d_try)
+```
+
+
+```{r}
+fit_rf_full <-   
+  rand_forest(trees = select_best(fits_rf)$trees,
+                mtry = select_best(fits_rf)$mtry,
+                min_n = select_best(fits_rf)$min_n) |>
+  set_engine("ranger", 
+             respect.unordered.factors = "order", 
+             importance = "impurity", 
+             oob.error = FALSE,
+             seed = 20010429) |>
+  set_mode("classification") |>  
+  fit(semester_phase ~ ., data = feat_full)
+```
+
+
+```{r}
+x <- feat_full |> select(-semester_phase)
+
+y <- feat_full |> 
+  mutate(semester_phase = factor(semester_phase, levels = c("beginning", "middle", "end"))) |> 
+  pull(semester_phase)
+
+```
+
+
+
+```{r}
+predict_wrapper <- function(model, newdata) {
+  predict(model, newdata)$.pred_class  # Returns the predicted class
+}
+```
+
+```{r}
+explain_full <- explain_tidymodels(
+  fit_rf_full,       # model object
+  data = x,          # features without outcome
+  y = y,             # outcome vector
+  predict_function = predict_wrapper,
+  label = "Random Forest Multiclass"  # Optional label for clarity
+)
+
+```
+
+```{r}
+library(yardstick)
+
+
+accuracy_wrapper <- function(observed, predicted) {
+  # Convert observed and predicted to factors with three levels
+  observed <- factor(observed, levels = c("beginning", "middle", "end"))
+  predicted <- factor(predicted, levels = c("beginning", "middle", "end"))
+  
+  # Ensure lengths match
+  if (length(observed) != length(predicted)) {
+    stop("Length of observed and predicted do not match.")
+  }
+  
+  # Calculate accuracy
+  accuracy_vec(observed, predicted)
+}
+
+
+```
+
+```{r}
+set.seed(20010429)
+imp_permute <- model_parts(explain_full, 
+                           type = "raw", 
+                           loss_function = accuracy_wrapper,
+                           B = 100)
+
+```
+
+
+```{r}
+imp_permute 
+```
+
+```{r}
+plot(imp_permute)
+```
+
+```{r}
+full_model <- imp_permute |>  
+    filter(variable == "_full_model_")
+  
+imp_permute |> 
+  filter(variable != "_full_model_",
+         variable != "_baseline_") |> 
+  mutate(variable = fct_reorder(variable, dropout_loss)) |> 
+  ggplot(aes(dropout_loss, variable)) +
+  geom_vline(data = full_model, aes(xintercept = dropout_loss),
+             linewidth = 1.4, lty = 2, alpha = 0.7) +
+  geom_boxplot(fill = "#91CBD765", alpha = 0.4) +
+  theme(legend.position = "none") +
+  labs(x = "accuracy", 
+       y = NULL,  fill = NULL,  color = NULL)
+```
+
+```{r}
+set.seed(20010429)
+imp_permute_group <- model_parts(explain_full, 
+                               type = "raw", 
+                               loss_function = accuracy_wrapper,
+                               B = 100,
+                               variable_groups = list(personality_test = 
+                                                        c("openness_score",
+                                                          "neuroticism_score",
+                                                          "extraversion_score", 
+                                                          "conscientiousness_score",
+                                                          "agreeableness_score")))
+```
+
+```{r}
+imp_permute_group
+```
+
+# For the linear model, we can also upsample the data for minority classes
+# Figure out the random forest model hyperparameters, the interpretation of results (also upsample it)
+# SOW: Have the intro, method, descriptive of data for presentation 
+# story? two multivariate models (linear and random forest)
+# pca of the independent variables, then knn? 
+# regularization and penalizaed models 
+# try KNN, 
+
 

@@ -1,0 +1,21 @@
+1. Why we are doing this? Assumption: Homogeneity not known for age and gender; Foundation: 
+data from 2018 - 2023; mixture of fluid intelligence task, days, growth mind set 
+
+Introducing the dataset: how many participants, variables(where these scales come from, why are we collecting these variables, i.e. ADHD, we study attention in the lab), the time we collect data, population, years (2018 - 2023)....
+
+Correlation: Can first show what I have done with posttest, a bigger dataset, have the results, then for the other datasets, whether I can replicate what I found (continuous days)
+
+Multivariate relationship: 
+First: Mediation --> linear model 
+
+Decision Tree (not a clear cut of which set of variables are more important than the other) <--> pca (feature importance, the continuous days)     
+Random Forest(the relative importance of variables!) (for this algorithm, I need categorical outcome var) 
+
+save all results in a doc, then put them together into the slides
+
+Should make a structure for slides (put everything on the slides, then restructure it!)
+
+
+Future Direction: Application of what is found to (think about it!) 
+
+Link between the things I'm showing, 

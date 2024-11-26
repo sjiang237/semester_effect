@@ -1,0 +1,143 @@
+---
+title: "Item_response_theory_analysis"
+author: "Shuheng Jiang"
+date: "2024-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load required packages 
+```{r}
+library(mirt)
+library(tidyverse) # for general data wrangling
+library(tidymodels)
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(skimr)
+library(tidyselect)
+library(tibble)
+library(effectsize)
+library(lme4)
+library(ggplot2)
+library(effects)
+library(nnet)
+library(broom)
+library(lavaan)
+library(ggeffects)
+```
+
+### Source function scripts
+```{r}
+#| message: false
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_plots.R?raw=true")
+devtools::source_url("https://github.com/jjcurtin/lab_support/blob/main/fun_eda.R?raw=true")
+source("C:/Users/16089/OneDrive/Desktop/lab psych610/610710_functions.R")
+```
+
+
+## Read in the data
+```{r}
+file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/cleaned_data_1"
+```
+
+```{r}
+d_try <- read_csv(here::here(file_path, "Generic_Post_Survey_Combined.csv"), 
+                   col_types = cols())
+```
+
+
+```{r}
+d_try <- d_try[!is.na(d_try$matrices_hit_rate), ]
+```
+
+```{r}
+range(d_try$sandia_1_correct)
+```
+```{r}
+d_try <- na.omit(d_try)
+```
+
+```{r}
+d_try %>%
+  skim_some(matrices_hit_rate, ucmrt_hit_rate, sandia_matrices_hit_rate) %>% 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+
+```{r}
+d_try_subset <- d_try[, c("ucmrt_1_correct", "ucmrt_2_correct", "ucmrt_3_correct", 
+                          "ucmrt_4_correct", "ucmrt_5_correct", "ucmrt_6_correct", 
+                          "ucmrt_7_correct", "ucmrt_8_correct", "ucmrt_9_correct", 
+                          "sandia_1_correct", "sandia_2_correct", "sandia_3_correct", 
+                          "sandia_4_correct", "sandia_5_correct", "sandia_6_correct", 
+                          "sandia_7_correct", "sandia_8_correct", "sandia_9_correct")]
+
+```
+
+```{r}
+str(d_try_subset)
+```
+
+```{r}
+d_try_subset %>%
+  skim_some() %>% 
+  select(skim_variable, n_missing, complete_rate)
+```
+
+## Item Response Analysis
+```{r}
+model_uni <- 'F1 = ucmrt_1_correct, ucmrt_2_correct, ucmrt_3_correct, ucmrt_4_correct, ucmrt_5_correct, ucmrt_6_correct, ucmrt_7_correct, ucmrt_8_correct, ucmrt_9_correct, sandia_1_correct, sandia_2_correct, sandia_3_correct,sandia_4_correct, sandia_5_correct, sandia_6_correct, sandia_7_correct, sandia_8_correct, sandia_9_correct'
+```
+
+```{r}
+model_vis_verbal <- 'Visuospatial = sandia_2_correct, sandia_4_correct, sandia_6_correct, sandia_8_correct, sandia_9_correct, ucmrt_3_correct, ucmrt_4_correct, ucmrt_6_correct, sandia_3_correct, sandia_5_correct,sandia_7_correct, ucmrt_1_correct, ucmrt_2_correct, ucmrt_5_correct
+                      VerbalAnalytic = sandia_1_correct,sandia_3_correct, sandia_5_correct, sandia_7_correct,ucmrt_1_correct, ucmrt_2_correct, ucmrt_5_correct, ucmrt_7_correct,ucmrt_8_correct, ucmrt_9_correct'
+```
+
+```{r}
+model_or_logic <- 'ObjectRelation = sandia_1_correct,sandia_3_correct, sandia_5_correct, sandia_7_correct, ucmrt_1_correct, ucmrt_2_correct, ucmrt_5_correct, ucmrt_7_correct,ucmrt_8_correct, ucmrt_9_correct
+                   Logic = sandia_2_correct, sandia_4_correct, sandia_6_correct, sandia_8_correct, sandia_9_correct, ucmrt_3_correct, ucmrt_4_correct, ucmrt_6_correct'
+```
+
+```{r}
+model_sandia_ucmrt <- 'Sandia = sandia_1_correct, sandia_2_correct, sandia_3_correct,sandia_4_correct, sandia_5_correct, sandia_6_correct, sandia_7_correct, sandia_8_correct, sandia_9_correct
+                      UCMRT = ucmrt_1_correct, ucmrt_2_correct, ucmrt_3_correct,ucmrt_4_correct, ucmrt_5_correct, ucmrt_6_correct,ucmrt_7_correct, ucmrt_8_correct, ucmrt_9_correct'
+```
+
+
+## Fitting Models
+Try to figure out the difference between 3PL and 2PL
+
+```{r}
+fit_uni <- mirt(d_try_subset, model_uni, itemtype = "2PL", technical = list(NCYCLES = 2000))
+fit_vis_verbal <- mirt(d_try_subset, model_vis_verbal, itemtype = "2PL", technical = list(NCYCLES = 2000))
+fit_or_logic <- mirt(d_try_subset, model_or_logic, itemtype = "2PL", technical = list(NCYCLES = 2000))
+fit_sandia_ucmrt <- mirt(d_try_subset, model_sandia_ucmrt, itemtype = "2PL", technical = list(NCYCLES = 2000))
+
+```
+
+```{r}
+summary(fit_uni)
+summary(fit_vis_verbal)
+summary(fit_or_logic)
+summary(fit_sandia_ucmrt)
+```
+
+```{r}
+summary(fit_uni)
+logLik(fit_uni)
+logLik(fit_vis_verbal)
+```
+
+```{r}
+BIC(fit_uni, fit_vis_verbal)
+```
+
+
+
+
+
