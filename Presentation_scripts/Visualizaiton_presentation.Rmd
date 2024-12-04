@@ -105,7 +105,7 @@ ggplot(data = d_try) +
 
 ```{r}
 ggplot(data = d_try) + 
-  geom_bar(aes(x = days_since_semester_start), fill = "blue") + # Adjust bar colors
+  geom_bar(aes(x = days_since_semester_start), fill = "red") + # Adjust bar colors
   facet_wrap(~semester_id) +  # Arrange facets in a grid
   theme_minimal() +  # Use a clean theme
   labs(
@@ -119,7 +119,7 @@ ggplot(data = d_try) +
 ```{r}
 
 ggplot(data = d_try) + 
-  geom_bar(aes(x= days_since_semester_start), fill="pink") +
+  geom_bar(aes(x= days_since_semester_start), fill="red") +
   theme_minimal() +  # Use a clean theme
   labs(
     title = "Enrollment Distribution of Participants",
@@ -138,7 +138,7 @@ d_matrices$semester_id <- factor(d_matrices$semester_id,
                                        "fall_2019", "spring_2020"))
 
 ggplot(data = d_matrices) + 
-  geom_bar(aes(x= days_since_semester_start), fill="yellow")+
+  geom_bar(aes(x= days_since_semester_start), fill="brown")+
   theme_minimal() +  # Use a clean theme
   labs(
     title = "Enrollment Distribution of Participants",
@@ -158,30 +158,60 @@ distribution_4 <- ggplot(data = d_personality) +
     y = "Enrollment Frequency",
     caption = "Data source: Data_Personality"
   ) 
+distribution_4
 ```
 
 
 
+## Interaction
 ```{r}
-ggsave(plot = distribution_4, 
-       filename = file.path(figure_path, 'distribution_4.png'), 
-       height = 5.5, width = 5.5,
-       units = 'in')
+ggplot() +
+  geom_point(data = d_try, aes(x = matrices_hit_rate, y = days_since_semester_start, color = semester), alpha = 0.5) +
+  geom_smooth(data = d_try, aes(x = matrices_hit_rate, y = days_since_semester_start, color = semester), method = "lm")
+```
+
+
+```{r}
+library(dplyr)
+
+```
+
+```{r}
+ggplot() +
+  geom_point(data = d_try, aes(x = days_since_semester_start, y = matrices_hit_rate, color = semester), alpha = 0.5) +
+  geom_smooth(data = d_try, aes(x = days_since_semester_start, y = matrices_hit_rate, color = semester), method = "lm")
+```
+
+
+```{r}
+d_try$adhd_clinical <- as.factor(d_try$adhd_clinical)
+d_try <- na.omit(d_try)
+ggplot() +
+  geom_point(data = d_try, aes(x = days_since_semester_start, y = matrices_hit_rate, color = adhd_clinical), alpha = 0.5) +
+  geom_smooth(data = d_try, aes(x = days_since_semester_start, y = matrices_hit_rate, color = adhd_clinical), method = "lm") +     
+  labs(
+    title = "Investigation of Potential Interaction",
+    x = "Days Since Semester Start When Completed the Survey",
+    y = "Matrices Test Composite Score",
+    caption = "Data source: Data_PostSurvey"
+  ) 
+
 ```
 
 
 ### Visualization 
 Have visualization for conscientioussness, openness, agreeableness, extraversion, matrices hit rate from two datasets; adhd_diagnosis from one dataset 
 ```{r}
-plot_big5_con_post <- ggplot(d_try, aes(x = conscientiousness_score, y = days_since_semester_start)) +
+plot_big5_con_post <- ggplot(d_try, aes(x = days_since_semester_start, y = conscientiousness_score)) +
   geom_point(alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE)+
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Conscientiousness Postsurvey', 
-       y = 'Days since semester starts when completed the survey',
-       title = 'Whether Conscientiousness affect \n time to research participation') +
-  ylim(0, 110) +
-  xlim(1, 5) +
+  labs(y = 'Big-5 Conscientiousness Postsurvey', 
+       x = 'Days since semester starts when completed the survey',
+       title = 'Whether Conscientiousness affect \n time to research participation',
+       caption = "Data source: Data_PostSurvey") +
+  ylim(1, 5) +
+  xlim(0, 110) +
   stat_cor(color = "red", size = 6) 
 
 plot_big5_con_post
@@ -198,15 +228,16 @@ ggsave(plot = plot_big5_con_post,
 
 ```{r}
 
-plot_conscientiousness_replicat <- ggplot(d_personality, aes(x = conscientiousness, y = days_since_semester_start)) +
+plot_conscientiousness_replicat <- ggplot(d_personality, aes(x = days_since_semester_start, y = conscientiousness)) +
   geom_point() +
   geom_smooth(method = "lm", color = "blue", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Conscientiousness Score Replication', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether Conscientiousness affect \n time to research participation') +
-  ylim(60, 110) +
-  xlim(18, 45) +
+  labs(y = 'Big-5 Conscientiousness Score Replication', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether Conscientiousness affect \n time to research participation',
+       caption = "Data source: Data_Personality") +
+  xlim(60, 110) +
+  ylim(18, 45) +
   stat_cor(color = "blue", size = 6) 
 
 plot_conscientiousness_replicat
@@ -219,15 +250,16 @@ ggsave(plot = plot_conscientiousness_replicat,
 
 
 ```{r}
-plot_big5_open_post <- ggplot(d_try, aes(x = openness_score, y = days_since_semester_start)) +
+plot_big5_open_post <- ggplot(d_try, aes(x = days_since_semester_start, y = openness_score)) +
   geom_jitter(alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Openness Postsurvey', 
-       y = 'Days since semester starts when completed the survey',
-       title = 'Whether Openness affect \n time to research participation') +
-  ylim(0,110)+
-  xlim(1, 5) +
+  labs(y = 'Big-5 Openness Postsurvey', 
+       x = 'Days since semester starts when completed the survey',
+       title = 'Whether Openness affect \n time to research participation',
+       caption = "Data source: Data_PostSurvey") +
+  xlim(0,110)+
+  ylim(1, 5) +
   stat_cor(color = "red", size = 6)
 plot_big5_open_post
 
@@ -238,15 +270,16 @@ ggsave(plot = plot_big5_open_post,
 ```
 
 ```{r}
-plot_openness_replication <- ggplot(d_personality, aes(x = openness, y = days_since_semester_start)) +
+plot_openness_replication <- ggplot(d_personality, aes(x = days_since_semester_start, y = openness)) +
   geom_jitter() +
   geom_smooth(method = "lm", color = "blue", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Openness Score Replication', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether Openness affect \n time to research participation') +
-  ylim(60, 110) +
-  xlim(14, 50) +
+  labs(y = 'Big-5 Openness Score Replication', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether Openness affect \n time to research participation',
+       caption = "Data source: Data_Personality") +
+  xlim(60, 110) +
+  ylim(14, 50) +
   stat_cor(color = "blue", size = 6) 
 plot_openness_replication 
 ggsave(plot = plot_openness_replication, 
@@ -258,15 +291,16 @@ ggsave(plot = plot_openness_replication,
 
 Extraversion
 ```{r}
-plot_big5_extraversion_post <- ggplot(d_try, aes(x = extraversion_score, y = days_since_semester_start)) +
+plot_big5_extraversion_post <- ggplot(d_try, aes(x = days_since_semester_start, y = extraversion_score)) +
   geom_jitter(alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Etraversion Postsurvey', 
-       y = 'Days since semester starts when completed the survey',
-       title = 'Whether Extraversion affect \n time to research participation') +
-  ylim(0,110)+
-  xlim(1, 5.4) +
+  labs(y = 'Big-5 Extraversion Postsurvey', 
+       x = 'Days since semester starts when completed the survey',
+       title = 'Whether Extraversion affect \n time to research participation',
+      caption = "Data source: Data_PostSurvey") +
+  xlim(0,110)+
+  ylim(1, 5.4) +
   stat_cor(color = 'red', size = 6)
 plot_big5_extraversion_post
 
@@ -278,15 +312,16 @@ ggsave(plot = plot_big5_extraversion_post,
 
 
 ```{r}
-plot_extraversion_replication <- ggplot(d_personality, aes(x = extraversion, y = days_since_semester_start)) +
+plot_extraversion_replication <- ggplot(d_personality, aes(x = days_since_semester_start, y = extraversion)) +
   geom_jitter() +
   geom_smooth(method = "lm", color = "blue", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Extraversion Replication', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether Extraversion affect \n time to research participation') +
-  ylim(60, 110) +
-  xlim(15, 36) +
+  labs(y = 'Big-5 Extraversion Replication', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether Extraversion affect \n time to research participation',
+       caption = "Data source: Data_Personality") +
+  xlim(60, 110) +
+  ylim(15, 36) +
   stat_cor(color = "blue", size = 6) 
 plot_extraversion_replication
 
@@ -298,15 +333,16 @@ ggsave(plot = plot_extraversion_replication,
 
 Agreeableness
 ```{r}
-plot_big5_agr_complete <- ggplot(d_try, aes(x = agreeableness_score, y = days_since_semester_start)) +
+plot_big5_agr_complete <- ggplot(d_try, aes(x = days_since_semester_start, y = agreeableness_score)) +
   geom_jitter(alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Agreeableness Postsurvey', 
-       y = 'Days since semester starts when completed the survey',
-       title = "Whether Agreeableness affect \n time to research participation") +
-  ylim(0, 110) +
-  xlim(1, 5.5) +
+  labs(y = 'Big-5 Agreeableness Postsurvey', 
+       x = 'Days since semester starts when completed the survey',
+       title = "Whether Agreeableness affect \n time to research participation",
+       caption = "Data source: Data_PostSurvey") +
+  xlim(0, 110) +
+  ylim(1, 5.5) +
   stat_cor(color = "red", size = 6) 
 plot_big5_agr_complete
 
@@ -317,17 +353,18 @@ ggsave(plot = plot_big5_agr_complete,
 ```
 
 ```{r}
-plot_agreeableness_replication <- ggplot(d_personality, aes(x = agreeableness, y = days_since_semester_start)) +
+plot_agreeableness_replication <- ggplot(d_personality, aes(x = days_since_semester_start, y = agreeableness)) +
   geom_jitter() +
   geom_smooth(method = "lm", color = "blue", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Big-5 Agreeableness Replication', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether Agreeableness affect \n time to research participation') +
-  ylim(60, 110) +
-  xlim(17, 45) +
+  labs(y = 'Big-5 Agreeableness Replication', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether Agreeableness affect \n time to research participation',
+       caption = "Data source: Data_Personality") +
+  xlim(60, 110) +
+  ylim(17, 45) +
   stat_cor(color = "blue", size = 6) 
-
+plot_agreeableness_replication
 ggsave(plot = plot_agreeableness_replication, 
        filename = file.path(figure_path, 'plot_agreeableness_replication.png'), 
        height = 5.5, width = 5.5,
@@ -337,15 +374,16 @@ ggsave(plot = plot_agreeableness_replication,
 
 Matrices Hit Rate
 ```{r}
-plot_matrices_hit_post <- ggplot(d_try, aes(x = matrices_hit_rate, y = days_since_semester_start)) +
+plot_matrices_hit_post <- ggplot(d_try, aes(x = days_since_semester_start, y = matrices_hit_rate)) +
   geom_jitter(alpha = 0.6) +
   geom_smooth(method = "lm", color="red", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Matrices Hit Rate Postsurvey', 
-       y = 'Days since semester starts when completed the survey',
-       title = 'Whether Fluid Intelligence affect \n time to research participation') +
-  ylim(0,110)+
-  xlim(0, 1.2) +
+  labs(y = 'Matrices Hit Rate Postsurvey', 
+       x = 'Days since semester starts when completed the survey',
+       title = 'Whether Fluid Intelligence affect \n time to research participation',
+       caption = "Data source: Data_PostSurvey") +
+  xlim(0,110)+
+  ylim(0, 1.2) +
   stat_cor(color = "red", size = 6)
 plot_matrices_hit_post
 ggsave(plot = plot_matrices_hit_post, 
@@ -355,16 +393,17 @@ ggsave(plot = plot_matrices_hit_post,
 ```
 
 ```{r}
-plot_matrices_replication <- ggplot(d_matrices, aes(x = matrices_hit_rate, y = days_since_semester_start)) +
+plot_matrices_replication <- ggplot(d_matrices, aes(x = days_since_semester_start, y = matrices_hit_rate)) +
   geom_jitter() +
-  geom_smooth(method = "lm", color = "blue", se = TRUE) +
+  geom_smooth(method = "lm", color = "brown", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Matrices Hit Rate Replication', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether Fluid Intelligence affect \n time to research participation') +
-  ylim(0, 110) +
-  xlim(0, 1) +
-  stat_cor(color = "blue", size = 6) 
+  labs(y = 'Matrices Hit Rate Replication', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether Fluid Intelligence affect \n time to research participation',
+       caption = "Data source: Data_Matrices") +
+  xlim(0, 110) +
+  ylim(0, 1) +
+  stat_cor(color = "brown", size = 6) 
 plot_matrices_replication
 ggsave(plot = plot_matrices_replication, 
        filename = file.path(figure_path, 'plot_matrices_replication.png'), 
@@ -373,15 +412,16 @@ ggsave(plot = plot_matrices_replication,
 ```
 
 ```{r}
-plot_adhd_postsurvey <- ggplot(d_try, aes(x = adhd_total, y = days_since_semester_start)) +
+plot_adhd_postsurvey <- ggplot(d_try, aes(x = days_since_semester_start, y = adhd_total)) +
   geom_jitter(alpha = 0.6) +
   geom_smooth(method = "lm", color = "red", se = TRUE) +
   theme_bw(base_size = 14) + 
-  labs(x = 'Total Score of 6-item ASRS Postsurvey', 
-       y = 'Days since semester starts when completed the survey', 
-       title = 'Whether ADHD Score affect \n time to research participation') +
-  ylim(0, 110) +
-  xlim(0, 7.0) +
+  labs(y = 'Total Score of 6-item ASRS Postsurvey', 
+       x = 'Days since semester starts when completed the survey', 
+       title = 'Whether ADHD Score affect \n time to research participation',
+       caption = "Data source: Data_PostSurvey") +
+  xlim(0, 110) +
+  ylim(0, 7.0) +
   stat_cor(color = "red", size = 6) 
 plot_adhd_postsurvey
 
