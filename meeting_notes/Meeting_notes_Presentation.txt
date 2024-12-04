@@ -1,0 +1,8 @@
+1. Have consistent color for each dataset 
+2. Check for typos for the axis label! 
+3. Swap the x-axis and y-axis for correlation plot 
+4. Have all table of predictors in the same order! 
+5. Show only the significant results of correlation (in this case ew can get rid of the openness!) 
+6. Do another mediation pathway (grit--conscientiousness--days), find theoretical justification for them! 
+7. Highlight what you want the audience to see! 
+8. Put the comparative table of three datasets into one table 
