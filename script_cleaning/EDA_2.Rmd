@@ -66,7 +66,7 @@ options(tibble.width = Inf, dplyr.print_max=Inf)
 
 ### file path
 ```{r}
-file_path <- "C:/Users/16089/OneDrive/Desktop/Capstone_Project/semester_effect/raw_data_2"
+file_path <- "C:/Users/1608/OneDrive/Desktop/Capstone_Project/semester_effect/raw_data_2"
 ```
 
 ```{r}
@@ -903,10 +903,17 @@ combined_data |> write_csv(here::here(cleaned_path, "R56_Combined_2.csv"))
 ```
 
 
-### checking the LocationLongitude between 80- 100
+# checking the LocationLongitude between 80- 100
 
 *clean composite above, compute the date as before for the EDA of this data*
 
-
+# Complie the R-56 datasets before Monday
+# Upload to the folder
+# Visualize the R-56 datasets
+# Upload the images to the folder
+# Write Down the Machine Learning Techniques I want to use
+-why this technique(what is interesting about it)
+-what info it can convey
+# Write down the Machine Learning Notes 
 
 
